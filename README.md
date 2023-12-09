@@ -1,1 +1,1 @@
-# Websocket for AKL analyzers in Python
+# Websocket for AKL analyzers
