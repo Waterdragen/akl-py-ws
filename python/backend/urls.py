@@ -16,8 +16,8 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from cmini.views import bad_request
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    path("cmini/", include("cmini.urls"))
+    path("400/", bad_request, name="bad_request"),
 ]
