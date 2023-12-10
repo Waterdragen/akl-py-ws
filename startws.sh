@@ -5,4 +5,4 @@ python3 python/manage.py runserver 1000 &
  
  
 # Start Rocket server for oxeylyzer
-cargo run --manifest-path rust/Cargo.toml 
+cargo run --release --manifest-path rust/Cargo.toml 
