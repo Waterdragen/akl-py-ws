@@ -1,1 +1,13 @@
+### Project ###
+directory.txt
+
+### Python ###
 python/.idea
+python/.vscode
+
+### Rust ###
+rust/.idea
+rust/.vscode
+rust/target/
+rust/cargo.log
+
