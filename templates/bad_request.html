@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style type="text/css">
+    .keyword{color:#CC7832; font-weight:bold;}
+	.string{color:#6A8759;}
+	.func{color:#FFC66D;}
+  </style>
+</head>
+
+<body style="background-color: #292929;
+             font-family: Roboto Mono, monospace;
+             padding: 10px 20px;
+            ">
+  <h1 style="color: #e2b714;">400 Bad request</h1>
+  <div style="color: #ddd;
+              font-size: 1.25em;
+             ">Try using a websocket instead</div>
+  <code class="language-javascript"
+		style="display: block;
+               font-family: Consolas, monospace;
+               margin: 8px 0;
+               padding: 0.5em;
+               width: fit-content;
+               background-color: #2b2d31;
+               color: #ddd;
+               border: 1px solid #1e1f22;
+               border-radius: 4px;
+              ">
+        <span class=keyword>let</span> webSocket = 
+		<span class=keyword>new</span> WebSocket(<span class=string>"807843.xyz"</span>);<br>
+		webSocket.<span style="color:#FFC66D">onopen</span> = <span class=keyword>function</span>() {<br>
+		&nbsp;&nbsp;&nbsp;&nbsp;console.<span class=func>log</span>("Connected to websocket!");<br>
+		};
+  </code>
+</body>
+</html>
