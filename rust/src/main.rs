@@ -55,7 +55,9 @@ async fn bad_request() -> HttpResponse {
 async fn main() -> std::io::Result<()> {
     println!("Running server at https://{}:2000", SERVER_URL);
     HttpServer::new(|| {
-        App::new().route("/rust/", web::get().to(ws_main))
+        App::new()
+            .service(web::resource("/rust").route(web::get().to(ws_main)))
+            .default_service(web::route().to(bad_request))
     })
         .bind((SERVER_URL, 2000))?
         .run()
