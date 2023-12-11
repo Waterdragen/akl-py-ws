@@ -6,7 +6,7 @@ use actix::{Actor, StreamHandler};
 use actix_web::{web, App, Error, HttpResponse, HttpServer, HttpRequest, http};
 use actix_web_actors::ws;
 
-static DEBUG: bool = false;
+static DEBUG: bool = true;
 static SERVER_URL: &str = if DEBUG { "127.0.0.1" } else { "0.0.0.0" };
 
 // Define HTTP actor
@@ -55,7 +55,9 @@ async fn bad_request() -> HttpResponse {
 async fn main() -> std::io::Result<()> {
     println!("Running server at https://{}:2000", SERVER_URL);
     HttpServer::new(|| {
-        App::new().route("/rust/", web::get().to(ws_main))
+        App::new()
+            .service(web::resource("/rust").route(web::get().to(ws_main)))
+            .default_service(web::route().to(bad_request))
     })
         .bind((SERVER_URL, 2000))?
         .run()
