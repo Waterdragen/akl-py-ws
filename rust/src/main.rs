@@ -6,7 +6,7 @@ use actix::{Actor, StreamHandler};
 use actix_web::{web, App, Error, HttpResponse, HttpServer, HttpRequest, http};
 use actix_web_actors::ws;
 
-static DEBUG: bool = true;
+static DEBUG: bool = false;
 static SERVER_URL: &str = if DEBUG { "127.0.0.1" } else { "0.0.0.0" };
 
 // Define HTTP actor
