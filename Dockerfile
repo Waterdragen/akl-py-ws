@@ -10,3 +10,5 @@ COPY nginx.conf /etc/nginx/conf.d/nginx.conf
 
 # Test config
 RUN nginx -t
+
+CMD: ./startws.sh
