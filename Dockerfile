@@ -8,6 +8,9 @@ RUN apt-get update && apt-get install -y python3 python3-pip python3-full
 # Set working directory
 WORKDIR .
 
+# Create and activate a virtual environment
+RUN python3 -m venv .
+
 # Install python dependencies
 RUN pip3 install --no-cache-dir -r python/requirements.txt
 
