@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y python3 python3-pip
 WORKDIR .
 
 # Create and activate a virtual environment
-RUN python -m venv /venv
+RUN python3 -m venv /venv
 ENV PATH="/venv/bin:$PATH"
 
 # Install python dependencies
