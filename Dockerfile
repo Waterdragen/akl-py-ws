@@ -25,9 +25,6 @@ COPY rust/Cargo.toml rust/Cargo.lock .
 # Grant execute permissions to buildws.sh
 RUN chmod +x /app/buildws.sh
 
-# Install all dependencies
-RUN bash /app/buildws.sh
-
 # Disable nginx welcome page
 RUN mv /etc/nginx/conf.d/default.conf /etc/nginx/conf.d/default.conf.disabled
 
@@ -37,5 +34,5 @@ COPY nginx.conf /etc/nginx/conf.d/nginx.conf
 # Grant execute permissions to startws.sh
 RUN chmod +x /app/startws.sh
 
-# Start websockets and nginx
-CMD bash /app/startws.sh && service nginx start
+# Install all dependencies, start websockets and nginx
+CMD bash /app/buildws.sh && bash /app/startws.sh && service nginx start
