@@ -53,7 +53,7 @@ async fn bad_request() -> HttpResponse {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    println!("Running server at https://{}:2000", SERVER_URL);
+    println!("Running server at https://{}:9001", SERVER_URL);
     HttpServer::new(|| {
         App::new()
             .service(web::resource("/rust").route(web::get().to(ws_main)))
