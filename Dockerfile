@@ -2,8 +2,8 @@
 
 FROM nginx
 
-# Install python and pip
-RUN apt-get update && apt-get install -y python3 python3-pip
+# Install Python, pip, and python3-full
+RUN apt-get update && apt-get install -y python3 python3-pip python3-full
 
 # Set working directory
 WORKDIR .
