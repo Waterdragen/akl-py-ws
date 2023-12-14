@@ -8,15 +8,6 @@ RUN apt-get update && apt-get install -y python3 python3-pip python3-full
 # Set working directory
 WORKDIR .
 
-# Copy the Python requirements files
-COPY python/Pipfile python/Pipfile.lock .
-
-# Install pipenv
-RUN pip3 install pipenv
-
-# Install Python dependencies within a virtual environment
-RUN pipenv install --system --deploy --ignore-pipfile
-
 # Create and activate a virtual environment
 RUN python3 -m venv /venv
 ENV PATH="/venv/bin:$PATH"
