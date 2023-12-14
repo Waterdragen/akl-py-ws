@@ -23,5 +23,8 @@ RUN mv /etc/nginx/conf.d/default.conf /etc/nginx/conf.d/default.conf.disabled
 # Copy nginx conf file
 COPY nginx.conf /etc/nginx/conf.d/nginx.conf
 
+# Grant execute permissions to startws.sh
+RUN chmod +x /app/startws.sh
+
 # Start websockets and nginx
-CMD /app/startws.sh && service nginx start
+CMD bash /app/startws.sh && service nginx start
