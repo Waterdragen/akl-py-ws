@@ -18,10 +18,15 @@ ENV PATH="/venv/bin:$PATH"
 
 # Copy python dependencies
 COPY python/requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Copy rust dependencies
 COPY rust/Cargo.toml rust/Cargo.lock .
+
+# Grant execute permissions to buildws.sh
+RUN chmod +x /app/buildws.sh
+
+# Install all dependencies
+RUN bash /app/buildws.sh
 
 # Disable nginx welcome page
 RUN mv /etc/nginx/conf.d/default.conf /etc/nginx/conf.d/default.conf.disabled
@@ -29,11 +34,8 @@ RUN mv /etc/nginx/conf.d/default.conf /etc/nginx/conf.d/default.conf.disabled
 # Copy nginx conf file
 COPY nginx.conf /etc/nginx/conf.d/nginx.conf
 
-# Grant execute permissions to buildws.sh
-RUN chmod +x /app/buildws.sh
-
 # Grant execute permissions to startws.sh
 RUN chmod +x /app/startws.sh
 
 # Start websockets and nginx
-CMD bash /app/buildws.sh && bash /app/startws.sh && service nginx start
+CMD bash /app/startws.sh && service nginx start
