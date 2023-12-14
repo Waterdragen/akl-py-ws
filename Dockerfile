@@ -6,7 +6,8 @@ FROM nginx
 RUN apt-get update && apt-get install -y python3 python3-pip python3-full
 
 # Set working directory
-WORKDIR .
+COPY . /app
+WORKDIR /app
 
 # Create and activate a virtual environment
 RUN python3 -m venv /venv
