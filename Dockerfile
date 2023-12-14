@@ -18,7 +18,7 @@ COPY python/requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Disable nginx welcome page
-RUN mv etc/nginx/conf.d/default.conf /app/etc/nginx/conf.d/default.conf.disabled
+RUN mv app/etc/nginx/conf.d/default.conf /etc/nginx/conf.d/default.conf.disabled
 
 # Copy nginx conf file
 COPY nginx.conf /app/etc/nginx/conf.d/nginx.conf
