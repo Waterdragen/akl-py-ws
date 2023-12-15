@@ -11,6 +11,7 @@ path = "src/main.rs"
 
 [profile.dev]
 opt-level = 1
+incremental = true
 
 [dependencies]
 actix = "0.13.1"
