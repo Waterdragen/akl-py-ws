@@ -41,4 +41,4 @@ RUN /app/buildws.sh
 RUN chmod +x /app/startws.sh
 
 # Start websockets and nginx
-CMD /app/startws.sh && service nginx start
+CMD /app/startws.sh && nginx -g 'daemon off;'
