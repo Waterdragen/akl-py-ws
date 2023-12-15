@@ -34,8 +34,11 @@ COPY nginx.conf /etc/nginx/conf.d/nginx.conf
 # Grant execute permissions to buildws.sh
 RUN chmod +x /app/buildws.sh
 
+# Install all dependencies
+RUN /app/buildws.sh
+
 # Grant execute permissions to startws.sh
 RUN chmod +x /app/startws.sh
 
-# Install all dependencies, start websockets and nginx
-CMD bash /app/buildws.sh && bash /app/startws.sh && service nginx start
+# Start websockets and nginx
+CMD bash /app/startws.sh && service nginx start

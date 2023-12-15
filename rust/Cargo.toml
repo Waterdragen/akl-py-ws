@@ -9,6 +9,9 @@ edition = "2021"
 name = "rust_ws"
 path = "src/main.rs"
 
+[profile.dev]
+opt-level = 1
+
 [dependencies]
 actix = "0.13.1"
 actix-web = "4.4.0"
