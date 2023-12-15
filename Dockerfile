@@ -40,8 +40,5 @@ RUN /app/buildws.sh
 # Grant execute permissions to startws.sh
 RUN chmod +x /app/startws.sh
 
-# Start websockets
-RUN /app/startws.sh
-
 # Start websockets and nginx
-CMD service nginx start
+CMD /app/startws.sh && service nginx start
