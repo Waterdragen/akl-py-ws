@@ -6,8 +6,8 @@ use actix::{Actor, StreamHandler};
 use actix_web::{web, App, Error, HttpResponse, HttpServer, HttpRequest, http};
 use actix_web_actors::ws;
 
-static DEBUG: bool = true;
-static SERVER_URL: &str = if DEBUG { "127.0.0.1" } else { "0.0.0.0" };
+static SERVER_URL: &str = "127.0.0.1";
+static SERVER_PORT: u32 = 9001;
 
 // Define HTTP actor
 struct MyWebSocket {
@@ -59,7 +59,7 @@ async fn main() -> std::io::Result<()> {
             .service(web::resource("/rust").route(web::get().to(ws_main)))
             .default_service(web::route().to(bad_request))
     })
-        .bind((SERVER_URL, 2000))?
+        .bind((SERVER_URL, SERVER_PORT))?
         .run()
         .await
 }
