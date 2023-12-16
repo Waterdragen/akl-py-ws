@@ -7,7 +7,7 @@ use actix_web::{web, App, Error, HttpResponse, HttpServer, HttpRequest, http};
 use actix_web_actors::ws;
 
 static SERVER_URL: &str = "127.0.0.1";
-static SERVER_PORT: u32 = 9001;
+static SERVER_PORT: u16 = 9001;
 
 // Define HTTP actor
 struct MyWebSocket {
