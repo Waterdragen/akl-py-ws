@@ -40,7 +40,9 @@ RUN /app/buildws.sh
 # Grant execute permissions to startws.sh
 RUN chmod +x /app/startws.sh
 
+ENV PORT=8080
+
 EXPOSE 8080
 
 # Start websockets and nginx
-CMD /app/startws.sh & nginx -g 'daemon off;' & echo "App is running"
+CMD ["sh", "/app/startws.sh"]
