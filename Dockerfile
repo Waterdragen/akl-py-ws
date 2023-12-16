@@ -22,9 +22,6 @@ ENV PATH="/root/.cargo/bin:$PATH"
 # Copy python dependencies
 COPY python/requirements.txt .
 
-# Copy rust dependencies
-COPY rust/Cargo.toml rust/Cargo.lock .
-
 # Disable nginx welcome page
 RUN mv /etc/nginx/conf.d/default.conf /etc/nginx/conf.d/default.conf.disabled
 
