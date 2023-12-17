@@ -2,11 +2,12 @@
 Set the path to the cmini websocket
 example: ws://localhost:8000/<path>
 """
+import re
 
-from django.urls import path
+from django.urls import re_path
 
 from . import consumers
 
 WEBSOCKET_URLPATTERNS = [
-    path(r"python/cmini/", consumers.CminiConsumer.as_asgi())
+    re_path("^python/cmini(/)*$", consumers.CminiConsumer.as_asgi())
 ]

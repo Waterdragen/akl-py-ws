@@ -8,7 +8,7 @@
   </style>
 </head>
 
-<body style="background-color: #292929;
+<body style="background-color: #2b2b2b;
              font-family: Roboto Mono, monospace;
              padding: 10px 20px;
             ">
@@ -31,7 +31,18 @@
 		<span class=keyword>new</span> WebSocket(<span class=string>"wss://807843.xyz"</span>);<br>
 		webSocket.<span class=func>onopen</span> = <span class=keyword>function</span>() {<br>
 		&nbsp;&nbsp;&nbsp;&nbsp;console.<span class=func>log</span>(<span class=string>"Connected to websocket!"</span>);<br>
-		};
+		};<br>
+        <br>
+        webSocket.onmessage = function(event) {<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;const message = event.data;<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;console.log("Received message: " + message);<br>
+        };<br>
+        <br>
+        function send(msg) {<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;if (webSocket.readyState === WebSocket.OPEN) {<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;webSocket.send("hello websocket");<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;}<br>
+        }<br>
   </code>
 </body>
 </html>

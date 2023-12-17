@@ -1,13 +1,15 @@
-### Project ###
+## Project ##
 directory.txt
 
-### Python ###
+## Python ##
 python/.idea
 python/.vscode
 
-### Rust ###
+## Rust ##
 rust/.idea
 rust/.vscode
 rust/target/
 rust/cargo.log
 
+#### Oxeylyzer ####
+rust/src/oxeylyzer/target/
