@@ -1,43 +1,31 @@
+mod oxeylyzer;
+
 use http::StatusCode;
 use std::fs::File;
 use std::io::{BufReader, Read};
 
 use actix::{Actor, StreamHandler};
-use actix_web::{web, App, Error, HttpResponse, HttpServer, HttpRequest, http};
+use actix_web::{App, Error, http, HttpRequest, HttpResponse, HttpServer, web};
 use actix_web_actors::ws;
+
+use oxeylyzer::Oxeylyzer;
 
 static SERVER_URL: &str = "127.0.0.1";
 static SERVER_PORT: u16 = 9001;
 
-// Define HTTP actor
-struct MyWebSocket {
-    // TODO: My WebSocket stats goes here
-}
-
-impl MyWebSocket {
-    fn new() -> Self {
-        // Create and return a new instance of the websocket state
-        MyWebSocket {}
+async fn ws_main(req: HttpRequest, stream: web::Payload, path: web::Path<String>) -> Result<HttpResponse, Error> {
+    // Handle HTTP requests
+    if !req.headers().contains_key("upgrade") {
+        return Ok(bad_request().await.into());
     }
-}
 
-impl Actor for MyWebSocket {
-    type Context = ws::WebsocketContext<Self>;
-
-    // TODO: Implement the WebSocket event handlers here
-}
-
-impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for MyWebSocket {
-    fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, context: &mut Self::Context) {
-        match msg {
-            Ok(ws::Message::Text(text)) => context.text(text),
-            _ => (),
-        }
+    // Handle websocket requests
+    let tail = path.trim_end_matches("/");
+    match tail {
+        "oxeylyzer" => ws::start(Oxeylyzer::new(), &req, stream),
+        _ => Ok(bad_request().await.into()),
     }
-}
 
-async fn ws_main(req: HttpRequest, stream: web::Payload) -> Result<HttpResponse, Error> {
-    ws::start(MyWebSocket::new(), &req, stream)
 }
 
 async fn bad_request() -> HttpResponse {
@@ -53,10 +41,10 @@ async fn bad_request() -> HttpResponse {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    println!("Running server at https://{}:9001", SERVER_URL);
+    println!("Running server at http://{}:9001", SERVER_URL);
     HttpServer::new(|| {
         App::new()
-            .service(web::resource("/rust").route(web::get().to(ws_main)))
+            .service(web::resource("/rust/{tail:.*}").route(web::get().to(ws_main)))
             .default_service(web::route().to(bad_request))
     })
         .bind((SERVER_URL, SERVER_PORT))?

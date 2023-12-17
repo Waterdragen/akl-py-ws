@@ -37,6 +37,7 @@ RUN /app/buildws.sh
 # Grant execute permissions to startws.sh
 RUN chmod +x /app/startws.sh
 
+# Let Render detect service running on 8080
 ENV PORT=8080
 
 EXPOSE 8080

@@ -1,0 +1,15 @@
+inherits = ["default"]
+
+letters_to_lowercase = "ó"
+
+[multiple]
+uppercase_versions = true
+list = [
+    ["á", "*a"],
+    ["é", "*e"],
+    ["í", "*i"],
+    # ["ó", "*o"],
+    ["ú", "*u"],
+    ["ü", "*y"],
+    ["ñ", "*n"]
+]
