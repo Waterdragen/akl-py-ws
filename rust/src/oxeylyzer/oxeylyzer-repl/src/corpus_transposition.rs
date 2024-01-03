@@ -5,6 +5,9 @@ use serde::Deserialize;
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
+use actix::Addr;
+use oxeylyzer_ws::messages::WsMessage;
+use oxeylyzer_ws::websocket::OxeylyzerWs;
 
 #[derive(Deserialize, Default)]
 struct Multiple {
@@ -165,11 +168,11 @@ impl CorpusConfig {
             .collect::<Vec<_>>()
     }
 
-    pub fn new_translator(language: &str, preferred_folder: Option<&str>) -> Translator {
+    pub fn new_translator(language: &str, preferred_folder: Option<&str>, addr: Addr<OxeylyzerWs>) -> Translator {
         match Self::new(language, preferred_folder) {
             Ok(config) => config.translator(),
             Err(error) => {
-                println!("{error}\nUsing a raw translator instead.");
+                addr.do_send(WsMessage(format!("{error}\nUsing a raw translator instead.")));
                 Self::raw_translator()
             }
         }

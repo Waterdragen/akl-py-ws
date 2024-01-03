@@ -1,14 +1,11 @@
-mod oxeylyzer;
-
 use http::StatusCode;
 use std::fs::File;
 use std::io::{BufReader, Read};
 
-use actix::{Actor, StreamHandler};
 use actix_web::{App, Error, http, HttpRequest, HttpResponse, HttpServer, web};
 use actix_web_actors::ws;
-
-use oxeylyzer::Oxeylyzer;
+use oxeylyzer_ws::websocket::OxeylyzerWs;
+use oxeylyzer_repl::repl::Repl;
 
 static SERVER_URL: &str = "127.0.0.1";
 static SERVER_PORT: u16 = 9001;
@@ -22,7 +19,7 @@ async fn ws_main(req: HttpRequest, stream: web::Payload, path: web::Path<String>
     // Handle websocket requests
     let tail = path.trim_end_matches("/");
     match tail {
-        "oxeylyzer" => ws::start(Oxeylyzer::new(), &req, stream),
+        "oxeylyzer" => ws::start(OxeylyzerWs::new(Repl::run), &req, stream),
         _ => Ok(bad_request().await.into()),
     }
 
@@ -41,7 +38,7 @@ async fn bad_request() -> HttpResponse {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    println!("Running server at http://{}:9001", SERVER_URL);
+    println!("Running server at http://{}:{}", SERVER_URL, SERVER_PORT);
     HttpServer::new(|| {
         App::new()
             .service(web::resource("/rust/{tail:.*}").route(web::get().to(ws_main)))

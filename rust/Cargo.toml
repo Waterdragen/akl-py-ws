@@ -1,5 +1,5 @@
 [package]
-name = "rust"
+name = "rust_ws"
 version = "0.1.0"
 edition = "2021"
 
@@ -18,5 +18,7 @@ actix = "0.13.1"
 actix-web = "4.4.0"
 actix-web-actors = "4.2.0"
 pkg-config = "0.3.27"
+
 oxeylyzer-core = { path = "./src/oxeylyzer/oxeylyzer-core" }
 oxeylyzer-repl = { path = "./src/oxeylyzer/oxeylyzer-repl" }
+oxeylyzer-ws = { path = "./src/oxeylyzer/oxeylyzer-ws" }

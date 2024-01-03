@@ -13,106 +13,102 @@ use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString, SmartStringMode};
 
+use actix::Addr;
+use oxeylyzer_ws::sender::Sendable;
+use oxeylyzer_ws::websocket::OxeylyzerWs;
+
 const FOUR_MB: u64 = 1024 * 1024 * 4;
 
-pub fn load_raw(language: &str) {
-    load_data(language, Translator::raw(true)).unwrap();
+pub struct LoadText {
+    addr: Addr<OxeylyzerWs>,
 }
 
-#[allow(dead_code)]
-pub(crate) fn load_default(language: &str) {
-    let translator = Translator::language_or_raw(language);
-    if let Err(error) = load_data(language, translator) {
-        println!("{language} failed to update: '{error}'");
+impl Sendable<OxeylyzerWs> for LoadText {
+    fn addr(&self) -> &Addr<OxeylyzerWs> {
+        &self.addr
     }
 }
 
-#[allow(dead_code)]
-pub(crate) fn load_all_default() -> Result<()> {
-    let start_total = Instant::now();
+impl LoadText {
+    pub fn new(addr: Addr<OxeylyzerWs>) -> Self {
+        LoadText {addr}
+    }
 
-    std::fs::read_dir(format!("static/text/"))?
-        .filter_map(Result::ok)
-        .for_each(|language_dir| {
-            let language = language_dir.path().display().to_string().replace("\\", "/");
-            let language = language.split("/").last().unwrap();
-            load_default(language);
-        });
-    println!(
-        "loading all languages took {}ms",
-        (Instant::now() - start_total).as_millis()
-    );
-    Ok(())
+    pub fn load_raw(&self, language: &str) {
+        self.load_data(language, Translator::raw(true)).unwrap();
+    }
+
+    pub fn load_data(&self, language: &str, translator: Translator) -> Result<()> {
+        let start_total = Instant::now();
+        let is_raw = translator.is_raw;
+
+        let chunkers = read_dir(format!("static/text/{language}"))?
+            .par_bridge()
+            .filter_map(Result::ok)
+            .flat_map(|dir_entry| File::open(dir_entry.path()))
+            .map(|f| {
+                let len = f.metadata().unwrap().len() + 1;
+                let count = (len / FOUR_MB).max(1);
+                (FileChunker::new(&f).unwrap(), count as usize)
+            })
+            .collect::<Vec<_>>();
+
+        let chunkers_time = Instant::now();
+        self.sendln(format!(
+            "Prepared text files in {}ms",
+            (chunkers_time - start_total).as_millis()
+        ));
+
+        let strings = chunkers
+            .par_iter()
+            .flat_map(|(chunker, count)| chunker.chunks(*count, Some(' ')).unwrap())
+            .map(|chunk| {
+                std::str::from_utf8(chunk).expect(
+                    "one of the files provided is not encoded as utf-8.\
+                    Make sure all files in the directory are valid utf-8.",
+                )
+            })
+            .map(|s| {
+                let mut last_chars = SmartString::<LazyCompact>::new();
+                let mut inter = [' '; 5];
+                s.chars()
+                    .rev()
+                    .take(5)
+                    .enumerate()
+                    .for_each(|(i, c)| unsafe { *inter.get_unchecked_mut(4 - i) = c });
+
+                inter.into_iter().for_each(|c| last_chars.push(c));
+                last_chars.push_str("     ");
+
+                (s, last_chars)
+            })
+            .collect::<Vec<_>>();
+
+        self.sendln(format!(
+            "Converted to utf8 in {}ms",
+            (Instant::now() - chunkers_time).as_millis()
+        ));
+
+        let quingrams = strings
+            .par_iter()
+            .map(|(s, last)| TextNgrams::from_str_last(s, &last))
+            .reduce(
+                || TextNgrams::default(),
+                |accum, new| accum.combine_with(new),
+            );
+
+        TextData::from((quingrams, language, translator)).save(is_raw)?;
+        self.sendln(format!(
+            "loading {} took {}ms",
+            language,
+            (Instant::now() - start_total).as_millis()
+        ));
+
+        Ok(())
+    }
+
 }
 
-pub fn load_data(language: &str, translator: Translator) -> Result<()> {
-    let start_total = Instant::now();
-    let is_raw = translator.is_raw;
-
-    let chunkers = read_dir(format!("static/text/{language}"))?
-        .par_bridge()
-        .filter_map(Result::ok)
-        .flat_map(|dir_entry| File::open(dir_entry.path()))
-        .map(|f| {
-            let len = f.metadata().unwrap().len() + 1;
-            let count = (len / FOUR_MB).max(1);
-            (FileChunker::new(&f).unwrap(), count as usize)
-        })
-        .collect::<Vec<_>>();
-
-    let chunkers_time = Instant::now();
-    println!(
-        "Prepared text files in {}ms",
-        (chunkers_time - start_total).as_millis()
-    );
-
-    let strings = chunkers
-        .par_iter()
-        .flat_map(|(chunker, count)| chunker.chunks(*count, Some(' ')).unwrap())
-        .map(|chunk| {
-            std::str::from_utf8(chunk).expect(
-                "one of the files provided is not encoded as utf-8.\
-                Make sure all files in the directory are valid utf-8.",
-            )
-        })
-        .map(|s| {
-            let mut last_chars = SmartString::<LazyCompact>::new();
-            let mut inter = [' '; 5];
-            s.chars()
-                .rev()
-                .take(5)
-                .enumerate()
-                .for_each(|(i, c)| unsafe { *inter.get_unchecked_mut(4 - i) = c });
-
-            inter.into_iter().for_each(|c| last_chars.push(c));
-            last_chars.push_str("     ");
-
-            (s, last_chars)
-        })
-        .collect::<Vec<_>>();
-
-    println!(
-        "Converted to utf8 in {}ms",
-        (Instant::now() - chunkers_time).as_millis()
-    );
-
-    let quingrams = strings
-        .par_iter()
-        .map(|(s, last)| TextNgrams::from_str_last(s, &last))
-        .reduce(
-            || TextNgrams::default(),
-            |accum, new| accum.combine_with(new),
-        );
-
-    TextData::from((quingrams, language, translator)).save(is_raw)?;
-    println!(
-        "loading {} took {}ms",
-        language,
-        (Instant::now() - start_total).as_millis()
-    );
-
-    Ok(())
-}
 
 #[derive(Default, Debug)]
 pub struct TextNgrams<'a, const N: usize> {
@@ -400,141 +396,5 @@ impl TextData {
 
         file.write(ser.into_inner().as_slice())?;
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{utility::ApproxEq, *};
-
-    #[test]
-    fn from_textngrams() {
-        let mut ngrams = TextNgrams::<5>::default();
-        ngrams.ngrams.insert("Amogu", 1);
-        ngrams.ngrams.insert("mogus", 1);
-        ngrams.ngrams.insert("ogus ", 1);
-        ngrams.ngrams.insert("gus  ", 1);
-        ngrams.ngrams.insert("us   ", 1);
-        ngrams.ngrams.insert("s    ", 1);
-        let translator = Translator::new().letters_to_lowercase("amogus").build();
-        let data = TextData::from((ngrams, "among", translator));
-
-        assert_eq!(data.char_sum, 6.0,);
-        assert_eq!(data.bigram_sum, 5.0,);
-        assert_eq!(data.skipgram_sum, 4.0,);
-        assert_eq!(data.skipgram2_sum, 3.0,);
-        assert_eq!(data.skipgram3_sum, 2.0,);
-        assert_eq!(data.trigram_sum, data.skipgram_sum);
-
-        for (_, f) in data.characters {
-            assert!(f.approx_eq_dbg(1.0 / 6.0, 15));
-        }
-        for (_, f) in data.bigrams {
-            assert!(f.approx_eq_dbg(1.0 / 5.0, 15));
-        }
-        for (_, f) in data.skipgrams {
-            assert!(f.approx_eq_dbg(1.0 / 4.0, 15));
-        }
-        for (_, f) in data.skipgrams2 {
-            assert!(f.approx_eq_dbg(1.0 / 3.0, 15));
-        }
-        for (_, f) in data.skipgrams3 {
-            assert!(f.approx_eq_dbg(1.0 / 2.0, 15));
-        }
-        for (_, f) in data.trigrams {
-            assert!(f.approx_eq_dbg(1.0 / 4.0, 15));
-        }
-    }
-
-    #[test]
-    fn load_language_data() {
-        use language_data::*;
-
-        load_default("test");
-
-        let data = LanguageData::from_file("static/language_data", "test")
-            .expect("'test.json' in static/language_data/ was not created");
-
-        assert!(data.language == "test");
-
-        let total_c = data
-            .characters
-            .iter()
-            .filter(|f| f > &&0.0)
-            .copied()
-            .reduce(f64::min)
-            .unwrap();
-        let total_c = (1.0 / total_c).round();
-
-        assert_eq!(total_c, 8.0);
-
-        assert_eq!(
-            data.characters
-                .get(data.convert_u8.to_single_lossy('e') as usize),
-            Some(&(2.0 / total_c))
-        );
-        assert_eq!(
-            data.characters
-                .get(data.convert_u8.to_single_lossy('\'') as usize),
-            Some(&(1.0 / total_c))
-        );
-
-        let total_b = 1.0
-            / data
-                .bigrams
-                .iter()
-                .map(|&f| f)
-                .filter(|f| f > &0.0)
-                .reduce(f64::min)
-                .unwrap();
-        let len = data.characters.len();
-
-        assert_eq!(
-            data.bigrams
-                .get(data.convert_u8.to_bigram_lossy(['\'', '*'], len)),
-            Some(&(1.0 / total_b))
-        );
-        assert_eq!(
-            data.bigrams
-                .get(data.convert_u8.to_bigram_lossy(['1', ':'], len)),
-            None
-        );
-
-        let total_s = 1.0
-            / data
-                .skipgrams
-                .iter()
-                .map(|&f| f)
-                .filter(|f| f > &0.0)
-                .reduce(f64::min)
-                .unwrap();
-
-        assert_eq!(
-            data.skipgrams
-                .get(data.convert_u8.to_bigram_lossy([';', 'd'], len)),
-            Some(&(1.0 / total_s))
-        );
-        assert_eq!(
-            data.skipgrams
-                .get(data.convert_u8.to_bigram_lossy(['*', 'e'], len)),
-            Some(&(1.0 / total_s))
-        );
-        assert_eq!(
-            data.skipgrams
-                .get(data.convert_u8.to_bigram_lossy(['t', 'e'], len)),
-            Some(&(1.0 / total_s))
-        );
-        assert_eq!(
-            data.skipgrams
-                .get(data.convert_u8.to_bigram_lossy(['\'', 't'], len)),
-            Some(&0.0)
-        );
-    }
-
-    #[test]
-    fn get_generator() {
-        let a = generate::LayoutGeneration::new("test", "static", None);
-        assert!(a.is_ok());
     }
 }

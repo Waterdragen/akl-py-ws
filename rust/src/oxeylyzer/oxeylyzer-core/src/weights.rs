@@ -59,7 +59,7 @@ struct ConfigLoad {
 
 impl ConfigLoad {
     pub fn new() -> Self {
-        let mut f = File::open("config.toml").expect("The config.toml is missing! Help!");
+        let mut f = File::open("./src/oxeylyzer/config.toml").expect("The config.toml is missing! Help!");
 
         let mut buf = Vec::new();
         f.read_to_end(&mut buf)

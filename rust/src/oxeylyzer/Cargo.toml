@@ -14,12 +14,14 @@ edition = "2021"
 [workspace]
 members = [
     "oxeylyzer-core",
-    "oxeylyzer-repl"
+    "oxeylyzer-repl",
+    "oxeylyzer-ws",
 ]
 
 [dependencies]
 oxeylyzer-core = { path = "./oxeylyzer-core" }
 oxeylyzer-repl = { path = "./oxeylyzer-repl" }
+oxeylyzer-ws = { path = "./oxeylyzer-ws" }
 
 [[bin]]
 name = "oxeylyzer"

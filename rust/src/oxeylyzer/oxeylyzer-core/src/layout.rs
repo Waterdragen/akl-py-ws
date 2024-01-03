@@ -1,3 +1,6 @@
+use actix::Addr;
+use oxeylyzer_ws::messages::WsMessage;
+use oxeylyzer_ws::websocket::OxeylyzerWs;
 use crate::trigram_patterns::{TrigramPattern, TRIGRAM_COMBINATIONS};
 use crate::utility::*;
 
@@ -5,8 +8,6 @@ pub type CharToFinger = [usize; 60];
 pub type Matrix<T> = [T; 30];
 
 pub trait Layout<T: Copy + Default> {
-    fn new() -> Self;
-
     fn random(available_chars: [T; 30]) -> Self;
 
     fn random_pins(layout_chars: [T; 30], pins: &[usize]) -> Self;
@@ -41,6 +42,7 @@ pub struct FastLayout {
     pub matrix: Matrix<u8>,
     pub char_to_finger: CharToFinger,
     pub score: f64,
+    addr: Option<Addr<OxeylyzerWs>>,
 }
 
 impl Default for FastLayout {
@@ -80,6 +82,23 @@ impl TryFrom<&[u8]> for FastLayout {
 }
 
 impl FastLayout {
+    fn new() -> Self {
+        FastLayout {
+            matrix: [u8::MAX; 30],
+            char_to_finger: [usize::MAX; 60],
+            score: 0.0,
+            addr: None,
+        }
+    }
+
+    pub fn set_addr(&mut self, addr: Addr<OxeylyzerWs>) {
+        self.addr = Some(addr.clone())
+    }
+
+    fn send(&self, msg: String) {
+        self.addr.as_ref().unwrap().do_send(WsMessage(msg));
+    }
+
     pub fn layout_str(&self, con: &ConvertU8) -> String {
         con.as_str(&self.matrix)
     }
@@ -104,14 +123,6 @@ impl FastLayout {
 }
 
 impl Layout<u8> for FastLayout {
-    fn new() -> FastLayout {
-        FastLayout {
-            matrix: [u8::MAX; 30],
-            char_to_finger: [usize::MAX; 60],
-            score: 0.0,
-        }
-    }
-
     fn random(mut with_chars: [u8; 30]) -> FastLayout {
         shuffle_pins::<30, u8>(&mut with_chars, &[]);
         FastLayout::from(with_chars)
@@ -150,7 +161,7 @@ impl Layout<u8> for FastLayout {
 
             return Some(());
         } else {
-            println!("Invalid coordinate, swap was cancelled");
+            self.send(format!("Invalid coordinate, swap was cancelled"));
             None
         }
     }
