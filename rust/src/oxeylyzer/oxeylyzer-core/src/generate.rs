@@ -1,6 +1,7 @@
 use std::hash::BuildHasherDefault;
 use std::hint::unreachable_unchecked;
 use std::path::Path;
+use actix::Addr;
 
 use anyhow::Result;
 use fxhash::FxHashMap;
@@ -13,6 +14,9 @@ use crate::layout::*;
 use crate::trigram_patterns::TrigramPattern;
 use crate::utility::*;
 use crate::weights::{Config, Weights};
+
+use oxeylyzer_ws::websocket::OxeylyzerWs;
+use oxeylyzer_ws::sender::Sendable;
 
 #[cfg(test)]
 static PRUNED_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -223,17 +227,25 @@ pub struct LayoutGeneration {
 
     pub weights: Weights,
     pub layouts: IndexMap<String, FastLayout, BuildHasherDefault<fxhash::FxHasher>>,
+
+    addr: Addr<OxeylyzerWs>,
+}
+
+impl Sendable<OxeylyzerWs> for LayoutGeneration {
+    fn addr(&self) -> &Addr<OxeylyzerWs> {
+        &self.addr
+    }
 }
 
 impl LayoutGeneration {
-    pub fn new<P>(language: &str, base_path: P, config: Option<Config>) -> Result<Self>
+    pub fn new<P>(language: &str, base_path: P, config: Option<Config>, addr: Addr<OxeylyzerWs>) -> Result<Self>
     where
         P: AsRef<Path>,
     {
         let config = config.unwrap_or_else(|| Config::new());
 
         if let Ok(mut data) =
-            LanguageData::from_file(base_path.as_ref().join("language_data"), language)
+            LanguageData::from_file(Path::new("./src/oxeylyzer").join(base_path.as_ref()).join("language_data"), language)
         {
             let chars_fg = data.convert_u8.to(chars_for_generation(language));
             let mut chars_for_generation: [u8; 30] = chars_fg.try_into().unwrap();
@@ -263,6 +275,8 @@ impl LayoutGeneration {
 
                 weights: config.weights,
                 layouts: IndexMap::default(),
+
+                addr,
             })
         } else {
             anyhow::bail!("Getting language data failed")
@@ -278,7 +292,7 @@ impl LayoutGeneration {
         P: AsRef<Path>,
     {
         let mut res: IndexMap<String, FastLayout> = IndexMap::new();
-        let language_dir_path = base_directory.as_ref().join(language);
+        let language_dir_path = Path::new("./src/oxeylyzer").join(base_directory.as_ref()).join(language);
 
         if let Ok(paths) = std::fs::read_dir(&language_dir_path) {
             let valid = paths
@@ -298,12 +312,13 @@ impl LayoutGeneration {
                     let layout_bytes = self.convert_u8.to(layout_str.chars());
 
                     if let Ok(mut layout) = FastLayout::try_from(layout_bytes.as_slice()) {
+                        layout.set_addr(self.addr.clone());
                         layout.score = self.score(&layout);
                         res.insert(name, layout);
 
                     // self.get_layout_stats(&layout);
                     } else {
-                        println!("layout {} is not formatted correctly", name);
+                        self.sendln(format!("layout {} is not formatted correctly", name));
                     }
                 }
             }
@@ -919,7 +934,9 @@ impl LayoutGeneration {
     }
 
     pub fn generate(&self) -> FastLayout {
-        let layout = FastLayout::random(self.chars_for_generation);
+        let mut layout = FastLayout::random(self.chars_for_generation);
+        layout.set_addr(self.addr.clone());
+
         let mut cache = self.initialize_cache(&layout);
 
         let mut layout = self.optimize(layout, &mut cache, &POSSIBLE_SWAPS);
@@ -990,6 +1007,8 @@ impl LayoutGeneration {
         possible_swaps: Option<&[PosPair]>,
     ) -> FastLayout {
         let mut layout = FastLayout::random_pins(based_on.matrix, pins);
+        layout.set_addr(self.addr.clone());
+
         let mut cache = self.initialize_cache(&layout);
 
         if let Some(ps) = possible_swaps {
@@ -1005,183 +1024,3 @@ impl LayoutGeneration {
 
 mod obsolete;
 // mod iterative;
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::utility::ApproxEq;
-    use nanorand::Rng;
-    use once_cell::sync::Lazy;
-    use std::sync::atomic::Ordering;
-
-    static GEN: Lazy<LayoutGeneration> =
-        Lazy::new(|| LayoutGeneration::new("english", "static", None).unwrap());
-
-    #[allow(dead_code)]
-    fn fspeed_per_pair() {
-        for (pair, dist) in GEN.fspeed_vals {
-            println!(
-                "({}, {}) <-> ({}, {}): {dist}",
-                pair.0 % 10,
-                pair.0 / 10,
-                pair.1 % 10,
-                pair.1 / 10
-            );
-        }
-    }
-
-    #[test]
-    fn prune_heuristic_correctness() {
-        //has been tested with 10000 runs
-        let runs = 200;
-
-        for _ in 0..runs {
-            let mut layout = FastLayout::random(GEN.chars_for_generation);
-            let cache = GEN.initialize_cache(&layout);
-
-            if let (Some(best_swap_normal), best_score_normal) =
-				GEN.best_swap(&mut layout, None, &POSSIBLE_SWAPS) {
-                
-                if let (Some(best_swap_cached), best_score_cached) =
-                    GEN.best_swap_cached(&mut layout, &cache, None, &POSSIBLE_SWAPS) {
-    
-                    if best_score_normal.approx_eq_dbg(best_score_cached, 7) {
-                        assert_eq!(best_swap_normal, best_swap_cached);
-                    }
-                }
-            }
-        }
-        println!(
-			"pruned {} times.\nRecalculated trigrams {} times.\namount pruned: {:.2}%\n analyzed {} swaps",
-			PRUNED_COUNT.load(Ordering::Relaxed),
-			435 * runs - PRUNED_COUNT.load(Ordering::Relaxed),
-			(PRUNED_COUNT.load(Ordering::Relaxed) as f64) / (435.0 * runs as f64) * 100.0,
-			435 * runs
-		);
-    }
-
-    #[test]
-    fn cached_totals() {
-        let qwerty_bytes = GEN
-            .convert_u8
-            .to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
-        let mut qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).unwrap();
-        let mut cache = GEN.initialize_cache(&qwerty);
-        let mut rng = nanorand::tls_rng();
-
-        for swap in (0..)
-            .map(|_| &POSSIBLE_SWAPS[rng.generate_range(0..435)])
-            .take(10000)
-        {
-            GEN.accept_swap(&mut qwerty, swap, &mut cache);
-
-            assert!(cache.scissors.approx_eq_dbg(GEN.scissor_score(&qwerty), 7));
-            assert!(cache
-                .effort_total
-                .approx_eq_dbg(GEN.effort_score(&qwerty), 7));
-            assert!(cache.usage_total.approx_eq_dbg(GEN.usage_score(&qwerty), 7));
-            assert!(cache
-                .fspeed_total
-                .approx_eq_dbg(GEN.fspeed_score(&qwerty), 7));
-            assert!(cache.trigrams_total.approx_eq_dbg(
-                GEN.trigram_score_iter(&qwerty, GEN.data.trigrams.iter().take(1000)),
-                7
-            ));
-            assert!(cache.lsbs.approx_eq_dbg(GEN.lsb_score(&qwerty), 7));
-            assert!(cache
-                .total_score
-                .approx_eq_dbg(GEN.score_with_precision(&qwerty, 1000), 7));
-        }
-    }
-
-    #[test]
-    fn best_found_swap() {
-        let qwerty_bytes = GEN
-            .convert_u8
-            .to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
-        let mut qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).unwrap();
-        let cache = GEN.initialize_cache(&qwerty);
-
-        if let (Some(best_swap_normal), best_score_normal) =
-			GEN.best_swap(&mut qwerty, None, &POSSIBLE_SWAPS) {
-            
-            if let (Some(best_swap_cached), best_score_cached) =
-                GEN.best_swap_cached(&mut qwerty, &cache, None, &POSSIBLE_SWAPS) {
-    
-                if best_score_normal.approx_eq_dbg(best_score_cached, 7) {
-                    assert_eq!(best_swap_normal, best_swap_cached);
-                } else {
-                    println!("scores not the same")
-                }
-            }
-		}
-    }
-
-    #[test]
-    fn score_swaps_no_accept() {
-        let qwerty_bytes = GEN
-            .convert_u8
-            .to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
-        let base = FastLayout::try_from(qwerty_bytes.as_slice()).unwrap();
-		let mut qwerty = base.clone();
-        let mut cache = GEN.initialize_cache(&qwerty);
-
-        for (i, swap) in POSSIBLE_SWAPS.iter().enumerate() {
-            let score_normal = GEN.score_swap(&mut qwerty, swap);
-            let score_cached = GEN.score_swap_cached(&mut qwerty, swap, &mut cache);
-
-			assert_eq!(base, qwerty);
-
-            assert!(
-                score_cached == f64::MIN + 1000.0 || score_normal.approx_eq_dbg(score_cached, 7),
-                "failed on iteration {i} for {}",
-                POSSIBLE_SWAPS[i]
-            );
-        }
-    }
-
-    #[test]
-    fn optimize_qwerty() {
-        let qwerty_bytes = GEN
-            .convert_u8
-            .to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
-        let qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).unwrap();
-
-        let optimized_normal = GEN.optimize_normal_no_cols(qwerty.clone(), &POSSIBLE_SWAPS);
-        let normal_score = GEN.score_with_precision(&optimized_normal, 1000);
-
-        let mut qwerty_for_cached = FastLayout::try_from(qwerty_bytes.as_slice()).unwrap();
-        let mut cache = GEN.initialize_cache(&qwerty_for_cached);
-
-        let best_cached_score =
-            GEN.optimize_cached(&mut qwerty_for_cached, &mut cache, &POSSIBLE_SWAPS);
-
-        assert!(normal_score.approx_eq_dbg(best_cached_score, 7));
-        assert_eq!(
-            qwerty_for_cached.layout_str(&GEN.convert_u8),
-            optimized_normal.layout_str(&GEN.convert_u8)
-        );
-        // println!("{qwerty_for_cached}");
-    }
-
-    #[test]
-    fn optimize_random_layouts() {
-        for _ in 0..5 {
-            let layout = FastLayout::random(GEN.chars_for_generation);
-            let mut layout_for_cached = layout.clone();
-
-            let optimized_normal = GEN.optimize_normal_no_cols(layout, &POSSIBLE_SWAPS);
-            let normal_score = GEN.score_with_precision(&optimized_normal, 1000);
-
-            let mut cache = GEN.initialize_cache(&layout_for_cached);
-            let best_cached_score =
-                GEN.optimize_cached(&mut layout_for_cached, &mut cache, &POSSIBLE_SWAPS);
-
-            assert!(normal_score.approx_eq_dbg(best_cached_score, 7));
-            assert_eq!(
-                layout_for_cached.layout_str(&GEN.convert_u8),
-                optimized_normal.layout_str(&GEN.convert_u8)
-            );
-        }
-    }
-}

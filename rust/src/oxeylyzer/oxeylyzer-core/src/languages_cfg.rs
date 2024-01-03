@@ -4,7 +4,7 @@ use std::io::Read;
 pub fn read_cfg() -> FxHashMap<String, String> {
     let mut res = FxHashMap::default();
 
-    if let Ok(mut f) = std::fs::File::open("languages_default.cfg") {
+    if let Ok(mut f) = std::fs::File::open("./src/oxeylyzer/languages_default.cfg") {
         let mut file_contents = String::new();
         f.read_to_string(&mut file_contents).unwrap();
 
