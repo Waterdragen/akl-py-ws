@@ -28,6 +28,9 @@ RUN mv /etc/nginx/conf.d/default.conf /etc/nginx/conf.d/default.conf.disabled
 # Copy nginx conf file
 COPY nginx.conf /etc/nginx/conf.d/nginx.conf
 
+# Copy templates to nginx directory
+COPY templates /etc/nginx/templates
+
 # Grant execute permissions to buildws.sh
 RUN chmod +x /app/buildws.sh
 
