@@ -76,7 +76,7 @@ impl TUI {
             .collect::<Vec<_>>();
 
         self.sendln(format!(
-            "Optimizing {} variants took: {} seconds",
+            "[PROGRESS]Optimizing {} variants took: {} seconds",
             amount,
             start.elapsed().as_secs()
         ));
@@ -110,7 +110,7 @@ impl TUI {
             .collect::<Vec<_>>();
 
         self.sendln(format!(
-            "optimizing {} variants took: {} seconds",
+            "[PROGRESS]optimizing {} variants took: {} seconds",
             amount,
             start.elapsed().as_secs()
         ));
