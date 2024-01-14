@@ -17,4 +17,6 @@ echo "App is running" &
 wait
 
 else
-    raise error "App deployment failed: rust will recompile"
+    echo "App deployment failed: rust will recompile"
+    exit 1
+fi
