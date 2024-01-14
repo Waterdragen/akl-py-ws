@@ -5,4 +5,3 @@ pip3 install --no-cache-dir -r requirements.txt &&
  
 # Install rust dependencies
 cargo build --release --manifest-path ./rust/Cargo.toml ;
-
