@@ -9,4 +9,6 @@ cargo build --release --manifest-path ./rust/Cargo.toml ;
 directory="./rust/target/release"
 
 if [ ! -d "$directory" ]; then
-    raise error "App deployment failed: wrong rust build directory"
+    echo "App deployment failed: wrong rust build directory"
+    exit 1
+fi
