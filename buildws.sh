@@ -4,5 +4,6 @@
 pip3 install --no-cache-dir -r requirements.txt &&
  
 # Install rust dependencies
-cargo clean --manifest-path rust/Cargo.toml &&
-cargo build --release --manifest-path rust/Cargo.toml ;
+cd ./rust &&
+cargo clean &&
+cargo build ;
