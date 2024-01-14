@@ -2,7 +2,7 @@
 
 # Start Actix server for oxeylyzer
 cd ./rust &&
-cargo run --release --manifest-path rust/Cargo.toml &
+cargo run --release &
 cd ../ &&
  
 # Start Django server for cmini
