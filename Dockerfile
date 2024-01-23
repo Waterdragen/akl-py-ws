@@ -6,7 +6,7 @@ FROM nginx
 RUN apt-get update && apt-get install -y python3 python3-pip python3-full
 
 # Install Rust
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.73.0
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 # Set working directory
 COPY . /app
