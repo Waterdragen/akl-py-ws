@@ -182,20 +182,22 @@ impl Repl {
             }
         };
         self.sendln(format!("\n{:31}{}", name1, name2));
+        let mut layouts_str = String::with_capacity(1400);
         for y in 0..3 {
             for (n, layout) in [l1, l2].into_iter().enumerate() {
                 for x in 0..10 {
-                    self.send(format!("{} ", TUI::heatmap_heat(&self.gen.data, layout.c(x + 10 * y))));
+                    layouts_str.push_str(&format!("{} ", TUI::heatmap_heat(&self.gen.data, layout.c(x + 10 * y))));
                     if x == 4 {
-                        self.send(format!(" "));
+                        layouts_str.push_str(" ");
                     }
                 }
                 if n == 0 {
-                    self.send(format!("          "));
+                    layouts_str.push_str("          ");
                 }
             }
-            self.sendln(format!(""));
+            layouts_str.push_str("\n");
         }
+        self.send(layouts_str);
         let s1 = self.gen.get_layout_stats(l1);
         let s2 = self.gen.get_layout_stats(l2);
         let ts1 = s1.trigram_stats;
