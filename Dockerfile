@@ -32,10 +32,16 @@ COPY nginx.conf /etc/nginx/conf.d/nginx.conf
 COPY templates /etc/nginx/templates
 
 # Grant execute permissions to buildws.sh
-RUN chmod +x /app/buildws.sh
+# RUN chmod +x /app/buildws.sh
 
 # Install all dependencies
-RUN /app/buildws.sh
+# RUN /app/buildws.sh
+
+RUN rustup install stable
+RUN rustup default stable
+RUN pip3 install --no-cache-dir -r requirements.txt
+RUN rustup run stable cargo build --release --manifest-path ./rust/Cargo.toml
+
 
 # Grant execute permissions to startws.sh
 RUN chmod +x /app/startws.sh
