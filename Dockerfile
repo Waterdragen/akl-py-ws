@@ -19,7 +19,7 @@ ENV PATH="/venv/bin:$PATH"
 # Add rust environment
 ENV RUSTUP_HOME="/opt/render/project/.rustup" \
     CARGO_HOME="/opt/render/project/.cargo" \
-    PATH="/opt/render/project/.cargo/bin:${PATH}" \
+    PATH="/root/.cargo/bin:${PATH}" \
     RUST_VERSION="1.75.0"
 
 # Copy python dependencies
