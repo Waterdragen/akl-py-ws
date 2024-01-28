@@ -17,7 +17,10 @@ RUN python3 -m venv /venv
 ENV PATH="/venv/bin:$PATH"
 
 # Add rust environment
-ENV PATH="/root/.cargo/bin:$PATH"
+ENV RUSTUP_HOME="/usr/local/rustup" \
+    CARGO_HOME="/usr/local/cargo" \
+    PATH="/usr/local/cargo/bin:$PATH" \
+    RUST_VERSION="1.75.0"
 
 # Copy python dependencies
 COPY python/requirements.txt .
