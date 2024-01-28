@@ -6,7 +6,7 @@ FROM nginx
 RUN apt-get update && apt-get install -y python3 python3-pip python3-full
 
 # Install Rust
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
 
 # Set working directory
 COPY . /app
@@ -17,9 +17,9 @@ RUN python3 -m venv /venv
 ENV PATH="/venv/bin:$PATH"
 
 # Add rust environment
-ENV RUSTUP_HOME="/root/.rustup" \
-    CARGO_HOME="/root/.cargo" \
-    PATH="/root/.cargo/bin:${PATH}" \
+ENV RUSTUP_HOME="/opt/render/project/.rustup" \
+    CARGO_HOME="/opt/render/project/.cargo" \
+    PATH="/opt/render/project/.cargo/bin:${PATH}" \
     RUST_VERSION="1.75.0"
 
 # Copy python dependencies
