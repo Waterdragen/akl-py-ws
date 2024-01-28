@@ -17,10 +17,14 @@ RUN python3 -m venv /venv
 ENV PATH="/venv/bin:$PATH"
 
 # Add rust environment
-ENV RUSTUP_HOME="/opt/render/project/.rustup" \
-    CARGO_HOME="/opt/render/project/.cargo" \
+ENV RUSTUP_HOME="/root/.rustup" \
+    CARGO_HOME="/root/.cargo" \
     PATH="/root/.cargo/bin:${PATH}" \
     RUST_VERSION="1.75.0"
+    
+RUN cargo --version; \
+    rustup --version; \
+    rustc --version;
 
 # Copy python dependencies
 COPY python/requirements.txt .
