@@ -2,9 +2,10 @@
 
 FROM nginx
 FROM rust:1.67
+FROM python:3.11
 
 # Install Python, pip, and python3-full
-RUN apt-get update && apt-get install -y python3 python3-pip python3-full
+# RUN apt-get update && apt-get install -y python3 python3-pip python3-full
 
 # Install Rust
 # RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
