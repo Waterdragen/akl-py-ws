@@ -39,6 +39,7 @@ COPY templates /etc/nginx/templates
 
 RUN rustup install stable
 RUN rustup default stable
+RUN exec $SHELL
 RUN pip3 install --no-cache-dir -r requirements.txt
 RUN rustup run stable cargo build --release --manifest-path ./rust/Cargo.toml
 
