@@ -8,7 +8,6 @@ RUN apt-get update && apt-get install -y python3 python3-pip python3-full
 
 # Install Rust
 # RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
-RUN cargo install --path .
 
 # Set working directory
 COPY . /app
