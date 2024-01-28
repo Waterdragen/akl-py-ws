@@ -1,12 +1,14 @@
 # syntax=docker/dockerfile:1.2
 
 FROM nginx
+FROM rust:1.67
 
 # Install Python, pip, and python3-full
 RUN apt-get update && apt-get install -y python3 python3-pip python3-full
 
 # Install Rust
-RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
+# RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
+RUN cargo install --path .
 
 # Set working directory
 COPY . /app
@@ -35,17 +37,10 @@ COPY nginx.conf /etc/nginx/conf.d/nginx.conf
 COPY templates /etc/nginx/templates
 
 # Grant execute permissions to buildws.sh
-# RUN chmod +x /app/buildws.sh
+RUN chmod +x /app/buildws.sh
 
 # Install all dependencies
-# RUN /app/buildws.sh
-
-RUN rustup install stable
-RUN rustup default stable
-RUN exec $SHELL
-RUN pip3 install --no-cache-dir -r requirements.txt
-RUN rustup run stable cargo build --release --manifest-path ./rust/Cargo.toml
-
+RUN sh /app/buildws.sh
 
 # Grant execute permissions to startws.sh
 RUN chmod +x /app/startws.sh
