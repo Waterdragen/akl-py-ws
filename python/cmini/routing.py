@@ -9,5 +9,6 @@ from django.urls import re_path
 from . import consumers
 
 WEBSOCKET_URLPATTERNS = [
-    re_path("^python/cmini(/)*$", consumers.CminiConsumer.as_asgi())
+    re_path("^python/cmini(/)*$", consumers.CminiConsumer.as_asgi()),
+    re_path("^python/a200(/)*$", consumers.A200Consumer.as_asgi()),
 ]
