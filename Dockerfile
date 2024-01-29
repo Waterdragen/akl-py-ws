@@ -12,9 +12,12 @@ RUN apt-get update && apt-get install -y python3 python3-pip python3-full
 # Install Rust
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
 
+# Install Go
+RUN apt-get update && apt-get install -y golang
+
 # Create and activate a python virtual environment
 RUN python3 -m venv /venv
-ENV PATH="/venv/bin:$PATH"
+ENV PATH="/venv/bin:${PATH}"
 
 # Add rust environment
 ENV RUSTUP_HOME="/root/.rustup" \
@@ -22,9 +25,15 @@ ENV RUSTUP_HOME="/root/.rustup" \
     PATH="/root/.cargo/bin:${PATH}" \
     RUST_VERSION="1.75.0"
     
+# Add go environment
+ENV GOPATH="/root/go" \
+    PATH="/root/go/bin:${PATH}"
+    
 RUN cargo --version; \
     rustup --version; \
     rustc --version;
+    
+RUN go version
 
 # Copy python dependencies
 COPY python/requirements.txt .
