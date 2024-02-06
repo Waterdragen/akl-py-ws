@@ -48,7 +48,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 
     # Add the name of the apps here
-    'cmini',
+    'apps',
 ]
 
 ASGI_APPLICATION = "backend.asgi.application"

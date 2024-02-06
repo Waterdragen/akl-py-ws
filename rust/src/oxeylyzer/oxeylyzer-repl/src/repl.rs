@@ -317,6 +317,11 @@ impl Repl {
             Some("generate") | Some("gen") | Some("g") => {
                 if let Some(count_str) = args.next_positional() {
                     if let Ok(count) = usize::from_str_radix(count_str, 10) {
+                        if count > 500 {
+                            self.sendln(String::from("Cannot generate more than 500 layouts in demo mode"));
+                            return Ok(true);
+                        }
+
                         self.sendln(format!("generating {} layouts...", count_str));
                         self.temp_generated = TUI::new(self.addr.clone()).generate_n(&self.gen, count);
                     } else {

@@ -1,0 +1,56 @@
+{
+    "layoutdir": "layouts",
+    "datadir": "data",
+    "cachedir": "cache",
+    "themedir": "themes",
+    "theme": "sunset",
+    "datafile": "monkeytype-quotes",
+    "thumb-space": "AVG",
+    "single-mode": {
+        "active": false,
+        "layouts": []
+    },
+    "sort": {},
+    "filter": {},
+    "sort-high": true,
+    "columns": {
+        "trigrams": {
+            "alternate": true,
+            "roll": true,
+            "roll-in": false,
+            "roll-out": false,
+            "roll-rt": false,
+            "redirect": true,
+            "onehand": true,
+            "oneh-in": false,
+            "oneh-out": false,
+            "oneh-rt": false,
+            "sfb": true,
+            "dsfb": true,
+            "dsfb-alt": false,
+            "dsfb-red": false,
+            "sfT": false,
+            "sfR": false,
+            "unknown": true
+        },
+        "finger-use": {
+            "LP": false,
+            "LR": false,
+            "LM": false,
+            "LI": false,
+            "RI": false,
+            "RM": false,
+            "RR": false,
+            "RP": false,
+            "LTotal": false,
+            "RTotal": false,
+            "TB": false
+        },
+        "row-use": {
+            "top": false,
+            "home": false,
+            "bottom": false
+        }
+    },
+    "layouts": {}
+}
