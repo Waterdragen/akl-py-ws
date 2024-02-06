@@ -19,4 +19,4 @@ from django.urls import path, include
 
 urlpatterns = [
 ]
-handler400 = "cmini.views.bad_request"
+handler400 = "apps.views.bad_request"

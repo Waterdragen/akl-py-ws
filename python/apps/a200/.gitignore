@@ -1,0 +1,10 @@
+# ignore pycache
+__pycache__/
+
+# ignore cache
+cache/
+
+# ignore config
+config.json
+init-config.json
+configs/

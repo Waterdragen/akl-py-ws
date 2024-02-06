@@ -6,6 +6,7 @@
     .token.keyword{color:#CC7832; font-weight:bold;}
 	.token.string{color:#6A8759;}
 	.token.function{color:#FFC66D;}
+    .token.comment{color:#808080;}
   </style>
 </head>
 
@@ -43,6 +44,20 @@ function send(msg) {
     webSocket.send(msg);
   }
 }
+
+/*
+# Websocket urls
+- cmini: ~/python/cmini
+- a200: ~/python/a200
+- oxeylyzer: ~/rust/oxeylyzer
+- genkey: ~/go/genkey
+
+# How to use
+1. open up your browser console
+2. paste this code snippet and edit the url
+3. call send("your message goes here") 
+   to send a message to the websocket
+/*
   </code></pre>
 </body>
 </html>
