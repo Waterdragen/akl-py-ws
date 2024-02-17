@@ -13,3 +13,10 @@ rust/cargo.log
 
 #### Oxeylyzer ####
 rust/src/oxeylyzer/target/
+
+## Go ##
+go/.idea
+go/.vscode
+go/akl-ws
+go/akl-ws.exe
+go/ws_test.go
