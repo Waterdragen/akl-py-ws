@@ -507,7 +507,7 @@ impl Repl {
                 }
             }
             Some("save") | Some("s") => {
-                self.sendln(format!("Unsupported feature"));
+                self.sendln(format!("Unsupported feature in demo mode"));
                 return Ok(true)
             }
             Some("quit") | Some("exit") | Some("q") => {

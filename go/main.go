@@ -4,38 +4,51 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"unsafe"
 
-	"github.com/gin-gonic/gin"
-	"github.com/gorilla/websocket"
+	genkey "github.com/waterdragen/akl-ws/genkey"
+
+	gin "github.com/gin-gonic/gin"
+	websocket "github.com/gorilla/websocket"
 )
 
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
-}
+// Require Go 1.21^
+// install all dependencies: `go mod download`
+
+var connUsersData *ConnUsers = NewConnUsers()
 
 func main() {
-	PORT := ":9002"
+	const PORT string = ":9002"
 
 	router := gin.Default()
 	router.LoadHTMLGlob("../templates/*")
 
+	upgrader := websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+		Error: func(w http.ResponseWriter, r *http.Request, status int, reason error) {
+		},
+	}
+
 	handleRoute := func(c *gin.Context) {
 		tail := strings.TrimSuffix(c.Param("tail"), "/")
 
-		if tail == "main" {
-			conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+		if tail == "genkey" {
+			var h http.Header = http.Header{}
+			h.Set("title", "text/html")
+			conn, err := upgrader.Upgrade(c.Writer, c.Request, h)
 			if err != nil {
-				panic(err)
+				c.HTML(http.StatusBadRequest, "bad_request.html", nil)
+				return
 			}
 
-			go handleWebsocket(conn)
+			go genkeyWebsocket(conn)
 
 		} else {
-			c.HTML(http.StatusBadRequest, "bad_request.html", gin.H{})
+			c.HTML(http.StatusBadRequest, "bad_request.html", nil)
 		}
 	}
 
@@ -44,7 +57,7 @@ func main() {
 
 	// Default service
 	router.NoRoute(func(c *gin.Context) {
-		c.HTML(http.StatusBadRequest, "bad_request.html", gin.H{})
+		c.HTML(http.StatusBadRequest, "bad_request.html", nil)
 	})
 
 	err := router.Run(PORT)
@@ -53,8 +66,11 @@ func main() {
 	}
 }
 
-func handleWebsocket(conn *websocket.Conn) {
-	defer conn.Close()
+func genkeyWebsocket(conn *websocket.Conn) {
+	defer func() {
+		connUsersData.Pop(generateConnID(conn))
+		conn.Close()
+	}()
 
 	for {
 		// Read message from the websock et client
@@ -63,13 +79,30 @@ func handleWebsocket(conn *websocket.Conn) {
 			log.Println("Failed to read message from Websocket:", err)
 			break
 		}
-		log.Printf("Received message: %s", message)
 
-		// Send the message back to the Websocket client
-		err = conn.WriteMessage(websocket.TextMessage, message)
-		if err != nil {
-			log.Println("Failed to write message to Websocket:", err)
-			break
+		connID := generateConnID(conn)
+
+		// Check if any cached data exists for this user
+		var userData *genkey.UserData
+
+		userDataObj, hasUserData := connUsersData.Get(connID)
+		if !hasUserData {
+			userData = nil
+		} else {
+			userData = userDataObj
 		}
+
+		// Run genkey
+		genkeyMain := genkey.NewGenkeyMain(conn, userData)
+		genkeyMain.Run()
+
+		// Store UserData to sync map
+		connUsersData.Add(connID, genkeyMain.GetUserData())
+
+		log.Printf("Received message: %s", message)
 	}
+}
+
+func generateConnID(conn *websocket.Conn) uint64 {
+	return uint64(uintptr((unsafe.Pointer(conn))))
 }
