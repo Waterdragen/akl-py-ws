@@ -76,7 +76,7 @@ func genkeyWebsocket(conn *websocket.Conn) {
 		// Read message from the websock et client
 		_, message, err := conn.ReadMessage()
 		if err != nil {
-			log.Println("Failed to read message from Websocket:", err)
+			// Disconnected
 			break
 		}
 
@@ -94,12 +94,19 @@ func genkeyWebsocket(conn *websocket.Conn) {
 
 		// Run genkey
 		genkeyMain := genkey.NewGenkeyMain(conn, userData)
-		genkeyMain.Run()
+		userData = genkeyMain.GetUserData()
+
+		if userData.Interactive.InInteractive {
+			genkeyInteractive := genkey.NewGenkeyInteractive(conn, userData)
+			genkeyInteractive.InteractiveSubsequent(string(message))
+		} else {
+			genkeyMain.Run(string(message))
+		}
+
+		genkeyMain.SendMessage("[DONE]")
 
 		// Store UserData to sync map
 		connUsersData.Add(connID, genkeyMain.GetUserData())
-
-		log.Printf("Received message: %s", message)
 	}
 }
 

@@ -4,7 +4,6 @@ go 1.21.6
 
 require (
 	github.com/BurntSushi/toml v1.3.2
-	github.com/eiannone/keyboard v0.0.0-20220611211555-0d226195f203
 	github.com/fogleman/gg v1.3.0
 	github.com/gin-gonic/gin v1.9.1
 	github.com/gorilla/websocket v1.5.1

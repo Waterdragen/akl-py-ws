@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
-	"runtime"
 	"sort"
 
 	"strings"
@@ -141,21 +140,26 @@ func (self *GenkeyGenerate) Populate(n int) Layout {
 		} else {
 			layouts = append(layouts, layoutScore{NewGenkeyInteractive(self.conn, self.userData).CopyLayout(self.userData.ImproveLayout), 0})
 		}
-		self.SendMessage(fmt.Sprintf("%d random created...\r", i+1))
 
 	}
-	self.SendMessage("\n")
+	self.SendMessage(fmt.Sprintf("%d random created...\r\n", n))
 
 	for i := range layouts {
 		layouts[i].score = 0
 		go self.greedyImprove(&layouts[i].l)
 	}
+
 	analyzed := 0
-	for runtime.NumGoroutine() > 1 {
-		self.SendMessage(fmt.Sprintf("%d greedy improving at %d analyzed/s       \r", runtime.NumGoroutine()-1, self.userData.Analyzed-analyzed))
+	goroCounter := &self.userData.GoroutineCounter
+
+	for goroCounter.GetCount() > 1 {
+		self.SendMessage(fmt.Sprintf("%d greedy improving at %d analyzed/s       \r", goroCounter.GetCount()-1, self.userData.Analyzed-analyzed))
 		analyzed = self.userData.Analyzed
 		time.Sleep(time.Second)
 	}
+
+	goroCounter.Reset()
+
 	self.SendMessage("\n")
 
 	self.SendMessage("Sorting...\n")
@@ -175,11 +179,13 @@ func (self *GenkeyGenerate) Populate(n int) Layout {
 		layouts[i].score = 0
 		go self.fullImprove(&layouts[i].l)
 	}
-	for runtime.NumGoroutine() > 1 {
-		self.SendMessage(fmt.Sprintf("%d fully improving at %d analyzed/s      \r", runtime.NumGoroutine()-1, self.userData.Analyzed-analyzed))
+
+	for goroCounter.GetCount() > 1 {
+		self.SendMessage(fmt.Sprintf("%d fully improving at %d analyzed/s      \r", goroCounter.GetCount()-1, self.userData.Analyzed-analyzed))
 		analyzed = self.userData.Analyzed
 		time.Sleep(time.Second)
 	}
+	goroCounter.Reset()
 
 	self.sortLayouts(layouts)
 
@@ -221,6 +227,9 @@ func (self *GenkeyGenerate) RandPos() Pos {
 }
 
 func (self *GenkeyGenerate) greedyImprove(layout *Layout) {
+	self.userData.GoroutineCounter.Increment()
+	defer self.userData.GoroutineCounter.Decrement()
+
 	stuck := 0
 	for {
 		first := self.Score(*layout)
@@ -247,6 +256,9 @@ func (self *GenkeyGenerate) greedyImprove(layout *Layout) {
 }
 
 func (self *GenkeyGenerate) fullImprove(layout *Layout) {
+	self.userData.GoroutineCounter.Increment()
+	defer self.userData.GoroutineCounter.Decrement()
+
 	i := 0
 	tier := 2
 	changed := false

@@ -762,9 +762,24 @@ func (self *GenkeyLayout) staggeredX(c, r int) float64 {
 	return sx
 }
 
+func (self *GenkeyLayout) staggeredY(c, r int) float64 {
+	config := &self.userData.Config
+	var sy float64
+	if c < 10 {
+		sy = float64(r) - config.Weights.ColStaggers[c]
+	} else if c >= 10 {
+		// Unsure if pinky stagger being the same is guaranteed
+		sy = float64(r) - config.Weights.ColStaggers[9]
+	}
+	return sy
+}
+
 func (self *GenkeyLayout) twoKeyDist(a, b Pos, weighted bool) float64 {
 	var ax float64
 	var bx float64
+	var ay float64
+	var by float64
+	userData := self.userData
 
 	if self.userData.StaggerFlag {
 		ax = self.staggeredX(a.Col, a.Row)
@@ -774,8 +789,16 @@ func (self *GenkeyLayout) twoKeyDist(a, b Pos, weighted bool) float64 {
 		bx = float64(b.Col)
 	}
 
+	if userData.ColStaggerFlag {
+		ay = self.staggeredY(a.Col, a.Row)
+		by = self.staggeredY(b.Col, b.Row)
+	} else {
+		ay = float64(a.Row)
+		by = float64(b.Row)
+	}
+
 	x := ax - bx
-	y := float64(a.Row - b.Row)
+	y := ay - by
 
 	var dist float64
 	if weighted {
