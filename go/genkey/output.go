@@ -52,12 +52,12 @@ func (self *GenkeyOutput) PrintLayout(keys [][]string) {
 func (self *GenkeyOutput) PrintAnalysis(l Layout) {
 	genkeyLayout := NewGenkeyLayout(self.conn, self.userData)
 
-	color.White().Bold().Println(l.Name)
+	self.SendMessage(color.White().Bold().Sprint(l.Name + "\n"))
 	self.PrintLayout(l.Keys)
 
 	duplicates, missing := genkeyLayout.DuplicatesAndMissing(l)
 	if len(duplicates) > 0 {
-		println(len(duplicates))
+		self.SendMessage(fmt.Sprintf("%d\n", len(duplicates)))
 		self.SendMessage(fmt.Sprintf("Duplicate characters: %s\n", duplicates))
 	}
 	if len(missing) > 0 {

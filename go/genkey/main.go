@@ -146,15 +146,7 @@ func (self *GenkeyMain) getLayout(s string) *Layout {
 		return &l
 	}
 	self.SendMessage(fmt.Sprintf("layout [%s] was not found\n", s))
-	os.Exit(1)
 	return nil
-}
-
-func (self *GenkeyMain) checkLayoutProvided(args []string) {
-	if len(args) <= 1 {
-		self.SendMessage("You must provide the name of a layout!\n")
-		os.Exit(1)
-	}
 }
 
 func (self *GenkeyMain) runCommand(args []string) {
@@ -196,6 +188,9 @@ func (self *GenkeyMain) runCommand(args []string) {
 			ngram = &args[1]
 		} else if command.Arg == LayoutArg {
 			layout = self.getLayout(args[1])
+			if layout == nil {
+				return
+			}
 		}
 		if command.CountArg && len(args) == 3 {
 			num, err := strconv.Atoi(args[2])
@@ -270,10 +265,11 @@ func (self *GenkeyMain) runCommand(args []string) {
 			)
 		}
 	} else if cmd == "interactive" {
-		NewGenkeyInteractive(self.conn, self.userData).Interactive(*layout)
+		NewGenkeyInteractive(self.conn, self.userData).InteractiveInitial(*layout)
 
 	} else if cmd == "heatmap" {
-		NewGenkeyOutput(self.conn, self.userData).Heatmap(*layout)
+		self.SendMessage("Unsupported command in demo mode")
+		// NewGenkeyOutput(self.conn, self.userData).Heatmap(*layout)
 	} else if cmd == "improve" {
 		genkeyGenerate := NewGenkeyGenerate(self.conn, self.userData)
 		self.userData.ImproveFlag = true
@@ -327,13 +323,16 @@ func (self *GenkeyMain) runCommand(args []string) {
 	} else if cmd == "ngram" {
 		total := float64(self.userData.Data.Total)
 		ngram := *ngram
-		if len(ngram) == 1 {
+		switch len(ngram) {
+		case 1:
 			self.SendMessage(fmt.Sprintf("unigram: %.3f%%\n", 100*float64(self.userData.Data.Letters[ngram])/total))
-		} else if len(ngram) == 2 {
+		case 2:
 			self.SendMessage(fmt.Sprintf("bigram: %.3f%%\n", 100*float64(self.userData.Data.Bigrams[ngram])/total))
 			self.SendMessage(fmt.Sprintf("skipgram: %.3f%%\n", 100*self.userData.Data.Skipgrams[ngram]/total))
-		} else if len(ngram) == 3 {
+		case 3:
 			self.SendMessage(fmt.Sprintf("trigram: %.3f%%\n", 100*float64(self.userData.Data.Trigrams[ngram])/total))
+		default:
+			self.SendMessage("Unimplemented feature in original app")
 		}
 	}
 }
@@ -358,13 +357,19 @@ func (self *GenkeyMain) commandUsage(command *Command) {
 	self.SendMessage(fmt.Sprintf("%s%s%s | %s\n", command.Names[0], argstr, countstr, command.Description))
 }
 
-func (self *GenkeyMain) Run() {
-	ReadWeights(&self.userData.Config)
-	flag.BoolVar(&self.userData.StaggerFlag, "stagger", self.userData.Config.Weights.Stagger, "if true, calculates distance for ANSI row-stagger form factor")
-	flag.BoolVar(&self.userData.SlideFlag, "slide", false, "if true, ignores slideable sfbs (made for Oats) (might not work)")
-	flag.BoolVar(&self.userData.DynamicFlag, "dynamic", false, "")
-	flag.Parse()
-	args := flag.Args()
+func (self *GenkeyMain) Run(input string) {
+	fs := flag.NewFlagSet("myProgram", flag.ExitOnError)
+	args := strings.Fields(input)
+	userData := self.userData
+
+	ReadWeights(&userData.Config)
+	fs.BoolVar(&userData.StaggerFlag, "stagger", userData.Config.Weights.Stagger, "if true, calculates distance for ANSI row-stagger form factor")
+	fs.BoolVar(&userData.ColStaggerFlag, "colstagger", userData.Config.Weights.ColStagger, "if true, calculates distance for col-stagger form factor")
+	fs.BoolVar(&userData.SlideFlag, "slide", false, "if true, ignores slideable sfbs (made for Oats) (might not work)")
+	fs.BoolVar(&userData.DynamicFlag, "dynamic", false, "")
+	fs.Parse(args)
+	args = fs.Args()
+
 	self.userData.Data = NewGenkeyText(self.conn, self.userData).LoadData(filepath.Join(self.userData.Config.Paths.Corpora, self.userData.Config.Corpus) + ".json")
 
 	self.userData.Layouts = make(map[string]Layout)

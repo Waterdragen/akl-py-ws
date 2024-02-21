@@ -37,6 +37,10 @@ func NewGenkeyText(conn *websocket.Conn, userData *UserData) *GenkeyText {
 	return &GenkeyText{conn, userData}
 }
 
+func (self *GenkeyText) SendMessage(s string) {
+	self.conn.WriteMessage(websocket.TextMessage, []byte(s))
+}
+
 type TextData struct {
 	Letters      map[string]int     `json:"letters"`
 	Bigrams      map[string]int     `json:"bigrams"`
@@ -48,7 +52,7 @@ type TextData struct {
 }
 
 func (self *GenkeyText) GetTextData(f string) TextData {
-	println("Reading...")
+	self.SendMessage("Reading...\n")
 	file, err := GenkeyOpen(f)
 	if err != nil {
 		panic(err)
@@ -97,7 +101,7 @@ func (self *GenkeyText) GetTextData(f string) TextData {
 
 		line++
 		if line%1000 == 0 {
-			fmt.Printf("%d lines read...\r", line)
+			self.SendMessage(fmt.Sprintf("%d lines read...\r", line))
 		}
 		for _, char := range chars {
 			data.Total++
@@ -149,7 +153,7 @@ func (self *GenkeyText) GetTextData(f string) TextData {
 		}
 	}
 
-	fmt.Println()
+	self.SendMessage("\n")
 
 	var sorted []FreqPair
 

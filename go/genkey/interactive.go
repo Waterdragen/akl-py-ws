@@ -4,14 +4,10 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
-	"os"
-	"path"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/eiannone/keyboard"
 
 	websocket "github.com/gorilla/websocket"
 	util "github.com/waterdragen/akl-ws/util"
@@ -19,10 +15,9 @@ import (
 )
 
 type GenkeyInteractive struct {
-	conn        *websocket.Conn
-	userData    *UserData
-	layoutwidth int
-	sp          *util.StringPrinter
+	conn     *websocket.Conn
+	userData *UserData
+	sp       *util.StringPrinter
 }
 
 func NewGenkeyInteractive(conn *websocket.Conn, userData *UserData) *GenkeyInteractive {
@@ -38,7 +33,7 @@ func (self *GenkeyInteractive) SendMessage(s string) {
 }
 
 func (self *GenkeyInteractive) FlushSp() {
-	msg := self.sp.Flush()
+	msg := self.sp.FlushAndTrim()
 	self.SendMessage(msg)
 }
 
@@ -78,7 +73,7 @@ func (self *GenkeyInteractive) printlayout(l *Layout, px, py int) {
 			c := color.Color(uint8(0.6*base+log), uint8(base+log), uint8(base+log))
 
 			self.sp.MoveCursor(px+(2*x), py+y)
-			self.sp.Print(c.Sprint(k))
+			self.sp.PrintColor(c, k)
 		}
 	}
 }
@@ -88,28 +83,30 @@ func (self *GenkeyInteractive) printfreqpairpercent(l *Layout, f FreqPair) {
 }
 
 func (self *GenkeyInteractive) printsfbs(l *Layout) {
+	interactive := &self.userData.Interactive
 	genkeyLayout := NewGenkeyLayout(self.conn, self.userData)
 
 	sfbs := genkeyLayout.ListSFBs(*l, false)
 	rate := genkeyLayout.SFBs(*l, false)
 	genkeyLayout.SortFreqList(sfbs)
-	self.sp.MoveCursor(4+(self.layoutwidth*2), 1)
+	self.sp.MoveCursor(4+(interactive.LayoutWidth*2), 1)
 	self.sp.Print(fmt.Sprintf("SFBs %.2f%%", 100*rate/l.Total))
 	for i := 0; i <= 4; i++ {
-		self.sp.MoveCursor(4+(self.layoutwidth*2), 2+i)
+		self.sp.MoveCursor(4+(interactive.LayoutWidth*2), 2+i)
 		self.sp.Print(fmt.Sprintf(" %s %s", sfbs[2*i].Ngram, sfbs[(2*i)+1].Ngram))
 	}
 }
 
 func (self *GenkeyInteractive) printworst(l *Layout) {
 	genkeyLayout := NewGenkeyLayout(self.conn, self.userData)
+	interactive := &self.userData.Interactive
 
 	bgs := genkeyLayout.ListWorstBigrams(*l)
 	genkeyLayout.SortFreqList(bgs)
-	self.sp.MoveCursor(3+(self.layoutwidth*2)+13, 1)
+	self.sp.MoveCursor(3+(interactive.LayoutWidth*2)+13, 1)
 	self.sp.Print("Worst BGs")
 	for i := 0; i <= 4; i++ {
-		self.sp.MoveCursor(3+(self.layoutwidth*2)+13, 2+i)
+		self.sp.MoveCursor(3+(interactive.LayoutWidth*2)+13, 2+i)
 		self.sp.Print(fmt.Sprintf(" %s %s", bgs[2*i].Ngram, bgs[(2*i)+1].Ngram))
 	}
 }
@@ -141,8 +138,7 @@ func (self *GenkeyInteractive) printtrigrams(l *Layout) {
 		}
 
 		for pc := math.Ceil(100 * float64(v) / total); pc > 0; pc -= 1 {
-			s := c.Sprint("=")
-			self.sp.Print(s)
+			self.sp.PrintColor(&c, "=")
 
 			x++
 			if x > 19 {
@@ -156,48 +152,6 @@ func (self *GenkeyInteractive) printtrigrams(l *Layout) {
 			}
 		}
 
-	}
-}
-
-type lScore struct {
-	l Layout
-	s float64
-}
-
-func (self *GenkeyInteractive) anneal(l Layout) {
-	self.message("annealing...")
-	self.FlushSp()
-
-	rand.Seed(time.Now().Unix())
-
-	genkeyGenerate := NewGenkeyGenerate(self.conn, self.userData)
-	currentscore := genkeyGenerate.Score(l)
-
-	x := int(float64(self.sp.Width)/2) - self.layoutwidth
-	y := int(float64(self.sp.Height) / 2)
-
-	self.printlayout(&l, x, y)
-	self.FlushSp()
-
-	for temp := 100; temp > 0; temp-- {
-		self.message(fmt.Sprintf("annealing... %d degrees", temp))
-		self.FlushSp()
-		for i := 0; i < 2*(100-temp); i++ {
-			p1 := genkeyGenerate.RandPos()
-			p2 := genkeyGenerate.RandPos()
-			genkeyGenerate.Swap(&l, p1, p2)
-			s := genkeyGenerate.Score(l)
-			if s < currentscore || rand.Intn(100) < temp {
-				// accept
-				currentscore = s
-
-				self.printlayout(&l, x, y)
-				self.FlushSp()
-			} else {
-				// reject
-				genkeyGenerate.Swap(&l, p1, p2)
-			}
-		}
 	}
 }
 
@@ -259,8 +213,8 @@ func (self *GenkeyInteractive) worsen(l Layout, is33 bool) {
 				xcol = x - 20
 			}
 		}
-		px := pins[xrow][xcol]
-		py := pins[yrow][ycol]
+		px := self.userData.Interactive.Pins[xrow][xcol]
+		py := self.userData.Interactive.Pins[yrow][ycol]
 		if px == "#" || py == "#" {
 			continue
 		}
@@ -275,8 +229,6 @@ func (self *GenkeyInteractive) worsen(l Layout, is33 bool) {
 		i = i + 1
 	}
 }
-
-var threshold float64
 
 func (self *GenkeyInteractive) SuggestSwaps(l Layout, depth int, maxdepth int, p *psbl, wg *sync.WaitGroup) psbl {
 	genkeyGenerate := NewGenkeyGenerate(self.conn, self.userData)
@@ -296,7 +248,7 @@ func (self *GenkeyInteractive) SuggestSwaps(l Layout, depth int, maxdepth int, p
 					genkeyGenerate.Swap(&l, p1, p2)
 					s2 := genkeyGenerate.Score(l)
 					diff := s1 - s2
-					if depth < maxdepth && diff > threshold {
+					if depth < maxdepth && diff > self.userData.Interactive.Threshold {
 						if depth == 0 {
 							possibilities = append(possibilities, psbl{Pair{p1, p2}, s2, s2})
 							go self.SuggestSwaps(self.CopyLayout(l), depth+1, maxdepth, &possibilities[len(possibilities)-1], wg)
@@ -338,247 +290,163 @@ func (self *GenkeyInteractive) SuggestSwaps(l Layout, depth int, maxdepth int, p
 }
 
 func (self *GenkeyInteractive) message(s ...string) {
-	self.sp.MoveCursor(0, self.sp.Height-2)
-	blank := strings.Repeat("     ", 9)
-	self.sp.Print(blank)
+	var base int = self.sp.Height - 2
+	var offset int
 	for i, v := range s {
-		self.sp.MoveCursor(0, self.sp.Height-(len(s)-i))
-		self.sp.Print(v + blank)
+		offset = len(s) - (i + 1)
+		self.sp.MoveCursor(0, base-offset)
+		self.sp.Print(v)
 	}
-	self.FlushSp()
 }
 
-func (self *GenkeyInteractive) input() string {
-	// TODO: rewrite a for loop into a single return from client after opening interactive mode
+func (self *GenkeyInteractive) InteractiveSubsequent(input string) {
+	defer self.FlushSp()
 
-	var runes []rune
-	self.sp.Print(fmt.Sprintf("%s\r", strings.Repeat(" ", self.sp.Width-2)))
-	self.sp.Print(":")
-	for {
-		self.FlushSp()
-		char, key, _ := keyboard.GetSingleKey()
-		if key == keyboard.KeyEnter {
-			break
-		} else if key == keyboard.KeyBackspace || key == keyboard.KeyBackspace2 {
-			if len(runes) > 0 {
-				runes = runes[:len(runes)-1]
+	self.sp.Clear()
+	self.SendMessage("[CLEAR]")
 
-				self.sp.MoveCursorBackward(1)
-				self.sp.Print("  ")
-			}
+	interactive := &self.userData.Interactive
+	l := interactive.Layout
+	args := strings.Fields(input)
+	is33 := false
+	noCross := true
+
+	self.sp.MoveCursor(0, self.sp.Height-2)
+
+	switch args[0] {
+	case "t":
+		var changeMessage string
+		enabled := &self.userData.Config.Weights.Score.Trigrams.Enabled
+		*enabled = !*enabled
+		if *enabled {
+			changeMessage = "enabled"
 		} else {
-			if len(runes) >= self.sp.Width-1 {
-				continue
-			}
-			if key == keyboard.KeySpace {
-				char = ' '
-			}
-			runes = append(runes, char)
+			changeMessage = "disabled"
 		}
-		self.sp.MoveCursor(2, self.sp.Height)
-		self.sp.Print(string(runes))
+		self.message(fmt.Sprintf("%s trigrams", changeMessage))
+	case "s":
+		if len(args) < 3 {
+			self.message("usage: s key1 key2", "example: s a b")
+			break
+		}
+		p1 := l.Keymap[args[1]]
+		p2 := l.Keymap[args[2]]
+		NewGenkeyGenerate(self.conn, self.userData).Swap(&l, p1, p2)
+		interactive.Aswaps[0] = p1
+		interactive.Bswaps[0] = p2
+		interactive.Swapnum = 1
+		self.message(fmt.Sprintf("swapped %s(%d,%d) with %s(%d,%d)", args[1], p1.Col, p1.Row, args[2], p2.Col, p2.Row))
+	case "cs":
+		if len(args) < 3 {
+			self.message("usage: cs key1/co1 key2/col2", "examples: cs a b  ||  cs 0 1")
+			break
+		}
+		var c1 int
+		var c2 int
+		if n, err := strconv.Atoi(args[1]); err == nil {
+			c1 = n
+		} else {
+			c1 = l.Keymap[args[1]].Col
+		}
+
+		if n, err := strconv.Atoi(args[2]); err == nil {
+			c2 = n
+		} else {
+			c2 = l.Keymap[args[2]].Col
+		}
+		for r := 0; r < 3; r++ {
+			p1 := Pos{c1, r}
+			p2 := Pos{c2, r}
+			NewGenkeyGenerate(self.conn, self.userData).Swap(&l, p1, p2)
+			interactive.Aswaps[r] = p1
+			interactive.Bswaps[r] = p2
+		}
+		interactive.Swapnum = 3
+		self.message(fmt.Sprintf("swapped c%d with c%d", c1, c2))
+	case "r":
+		for i := 0; i < interactive.Swapnum; i++ {
+			NewGenkeyGenerate(self.conn, self.userData).Swap(&l, interactive.Aswaps[i], interactive.Bswaps[i])
+		}
+		self.message("reverted last swap")
+	case "g":
+		var max int
+		if len(args) < 2 {
+			max = 1
+		} else {
+			max, _ = strconv.Atoi(args[1])
+			interactive.Threshold = 0
+		}
+		c := self.CopyLayout(l)
+		var wg sync.WaitGroup
+		swaps := self.SuggestSwaps(c, 0, max, &psbl{}, &wg)
+		k1 := l.Keys[swaps.pair[0].Row][swaps.pair[0].Col]
+		k2 := l.Keys[swaps.pair[1].Row][swaps.pair[1].Col]
+		if swaps.score == 0.0 {
+			self.message("no suggestion")
+		} else {
+			self.message(fmt.Sprintf("try %s (%.1f immediate, %.1f potential)", k1+k2, swaps.score, swaps.potential))
+		}
+	case "w":
+		self.worsen(l, is33)
+	case "m2":
+		NewGenkeyLayout(self.conn, self.userData).MinimizeLayout(&l, interactive.Pins, 1, true, is33, noCross)
+	case "m":
+		NewGenkeyLayout(self.conn, self.userData).MinimizeLayout(&l, interactive.Pins, 0, true, is33, noCross)
+	case "q":
+		interactive.InInteractive = false
+	case "save":
+		self.message("Unsupported feature in demo mode")
 	}
-	input := strings.TrimSpace(string(runes))
-	return input
+
+	self.printUpdatedLayout(time.Now())
+	self.sp.Print(":")
 }
 
-var pins [][]string
+func (self *GenkeyInteractive) InteractiveInitial(l Layout) {
+	defer self.FlushSp()
 
-func (self *GenkeyInteractive) Interactive(l Layout) {
+	interactive := &self.userData.Interactive
+	interactive.InInteractive = true
+	interactive.Layout = l
 
-	/*
-		TODO
-		Cached data:
-			- instance of Config
-			- `awaps      []Pos`
-			- `bswaps     []Pos`
-			- `swapnum    int`
-			- `pins       [][]string`
-			- `threshold` float64
-	*/
 	for _, row := range l.Keys {
 		for x := range row {
-			if x > self.layoutwidth {
-				self.layoutwidth = x
+			if x > interactive.LayoutWidth {
+				interactive.LayoutWidth = x
 			}
 		}
 	}
 	self.sp.Clear()
-	self.SendMessage("[CLEAR]")
 
-	aswaps := make([]Pos, 3)
-	bswaps := make([]Pos, 3)
-	var swapnum int
-
-	if err := keyboard.Open(); err != nil {
-		panic(err)
-	}
-	defer func() {
-		_ = keyboard.Close()
-	}()
-
-	pins = [][]string{
+	interactive.Aswaps = make([]Pos, 3)
+	interactive.Bswaps = make([]Pos, 3)
+	interactive.Swapnum = 0
+	interactive.Pins = [][]string{
 		{"@", "#", "#", "#", "@", "@", "#", "#", "#", "@", "#", "#"},
 		{"#", "#", "#", "#", "@", "@", "#", "#", "#", "#", "#", "@"},
 		{"@", "@", "@", "@", "@", "@", "@", "@", "@", "@", "@", "@"},
 	}
 
-	start := time.Now()
+	self.printUpdatedLayout(time.Now())
+	self.sp.Print(":")
+}
 
-	// TODO: rewrite for loop as single execution
-	// TODO: keep track of (any) interactive mode caches
-	for {
-		self.sp.MoveCursor(0, 0)
-		self.sp.Print(l.Name)
-		self.printlayout(&l, 1, 2)
-		self.sp.MoveCursor(1, 5)
-		self.sp.Print(fmt.Sprintf("Score: %.2f", NewGenkeyGenerate(self.conn, self.userData).Score(l)))
-		self.printsfbs(&l)
-		self.printworst(&l)
-		self.printtrigrams(&l)
-		end := time.Now()
-		elapsed := end.Sub(start)
-		s := elapsed.String()
-		self.sp.MoveCursor(self.sp.Width-len(s)-1, 1)
-		self.sp.Print("  " + s)
-		self.sp.MoveCursor(0, self.sp.Height)
+func (self *GenkeyInteractive) printUpdatedLayout(start time.Time) {
+	l := self.userData.Interactive.Layout
 
-		self.FlushSp()
-
-		i := self.input()
-		args := strings.Split(i, " ")
-
-		start = time.Now()
-		is33 := false
-		noCross := true
-
-		switch args[0] {
-		case "t":
-			var changeMessage string
-			enabled := &self.userData.Config.Weights.Score.Trigrams.Enabled
-			*enabled = !*enabled
-			if *enabled {
-				changeMessage = "enabled"
-			} else {
-				changeMessage = "disabled"
-			}
-			self.message(fmt.Sprintf("%s trigrams", changeMessage))
-		case "s":
-			if len(args) < 3 {
-				self.message("usage: s key1 key2", "example: s a b")
-				break
-			}
-			p1 := l.Keymap[args[1]]
-			p2 := l.Keymap[args[2]]
-			NewGenkeyGenerate(self.conn, self.userData).Swap(&l, p1, p2)
-			aswaps[0] = p1
-			bswaps[0] = p2
-			swapnum = 1
-			self.message(fmt.Sprintf("swapped %s(%d,%d) with %s(%d,%d)", args[1], p1.Col, p1.Row, args[2], p2.Col, p2.Row))
-		case "cs":
-			if len(args) < 3 {
-				self.message("usage: cs key1/co1 key2/col2", "examples: cs a b  ||  cs 0 1")
-				break
-			}
-			var c1 int
-			var c2 int
-			if n, err := strconv.Atoi(args[1]); err == nil {
-				c1 = n
-			} else {
-				c1 = l.Keymap[args[1]].Col
-			}
-
-			if n, err := strconv.Atoi(args[2]); err == nil {
-				c2 = n
-			} else {
-				c2 = l.Keymap[args[2]].Col
-			}
-			for r := 0; r < 3; r++ {
-				p1 := Pos{c1, r}
-				p2 := Pos{c2, r}
-				NewGenkeyGenerate(self.conn, self.userData).Swap(&l, p1, p2)
-				aswaps[r] = p1
-				bswaps[r] = p2
-			}
-			swapnum = 3
-			self.message(fmt.Sprintf("swapped c%d with c%d", c1, c2))
-		case "r":
-			for i := 0; i < swapnum; i++ {
-				NewGenkeyGenerate(self.conn, self.userData).Swap(&l, aswaps[i], bswaps[i])
-			}
-			self.message("reverted last swap")
-		case "g":
-			var max int
-			if len(args) < 2 {
-				max = 1
-			} else {
-				max, _ = strconv.Atoi(args[1])
-				threshold = 0
-			}
-			c := self.CopyLayout(l)
-			var wg sync.WaitGroup
-			swaps := self.SuggestSwaps(c, 0, max, &psbl{}, &wg)
-			k1 := l.Keys[swaps.pair[0].Row][swaps.pair[0].Col]
-			k2 := l.Keys[swaps.pair[1].Row][swaps.pair[1].Col]
-			if swaps.score == 0.0 {
-				self.message("no suggestion")
-			} else {
-				self.message(fmt.Sprintf("try %s (%.1f immediate, %.1f potential)", k1+k2, swaps.score, swaps.potential))
-			}
-		case "w":
-			self.worsen(l, is33)
-		case "m2":
-			NewGenkeyLayout(self.conn, self.userData).MinimizeLayout(&l, pins, 1, true, is33, noCross)
-		case "m":
-			NewGenkeyLayout(self.conn, self.userData).MinimizeLayout(&l, pins, 0, true, is33, noCross)
-		case "q":
-			os.Exit(0)
-		case "save":
-			// TODO: disable this command
-
-			self.message("enter a layout name:")
-			self.FlushSp()
-			name := self.input()
-			filename := strings.ReplaceAll(name, " ", "_")
-			filename = strings.ToLower(filename)
-			filepath := path.Join("layouts", filename)
-			_, err := os.Stat(filepath)
-			if !os.IsNotExist(err) {
-				self.message("this layout name is taken.", "are you sure you want to overwrite? (y/n)")
-				self.FlushSp()
-				i := self.input()
-				self.message("", "")
-
-				if i != "y" {
-					break
-				}
-			}
-			content := make([]string, 8)
-			content[0] = name
-			content[1] = strings.Join(l.Keys[0], " ")
-			content[2] = strings.Join(l.Keys[1], " ")
-			content[3] = strings.Join(l.Keys[2], " ")
-
-			fingermatrix := make([][]string, 3)
-			for i := 0; i < 3; i++ {
-				fingermatrix[i] = make([]string, 20)
-			}
-
-			for p, n := range l.Fingermatrix {
-				fingermatrix[p.Row][p.Col] = strconv.Itoa(int(n))
-			}
-			content[4] = strings.Join(fingermatrix[0], " ")
-			content[5] = strings.Join(fingermatrix[1], " ")
-			content[6] = strings.Join(fingermatrix[2], " ")
-
-			b := []byte(strings.Join(content, "\n"))
-
-			err = os.WriteFile(filepath, b, 0644)
-			if err != nil {
-				self.message("error!", err.Error())
-			} else {
-				self.message(fmt.Sprintf("saved to %s!", filepath))
-			}
-		}
-	}
+	self.sp.MoveCursor(0, 0)
+	self.sp.Print(l.Name)
+	self.printlayout(&l, 1, 2)
+	self.sp.MoveCursor(1, 5)
+	self.sp.Print(fmt.Sprintf("Score: %.2f", NewGenkeyGenerate(self.conn, self.userData).Score(l)))
+	self.printsfbs(&l)
+	self.printworst(&l)
+	self.printtrigrams(&l)
+	end := time.Now()
+	elapsed := end.Sub(start)
+	millis := float64(elapsed) / float64(time.Millisecond)
+	s := fmt.Sprintf("%vms", millis)
+	self.sp.MoveCursor(self.sp.Width-len(s), 1)
+	self.sp.Print(s)
+	self.sp.MoveCursor(0, self.sp.Height-1)
 }

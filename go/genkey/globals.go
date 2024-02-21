@@ -17,6 +17,8 @@ package genkey
 import (
 	"os"
 	"path/filepath"
+
+	util "github.com/waterdragen/akl-ws/util"
 )
 
 var FingerNames = [8]string{"LP", "LR", "LM", "LI", "RI", "RM", "RR", "RP"}
@@ -43,8 +45,10 @@ type UserConfig struct {
 		Heatmap string
 	}
 	Weights struct {
-		Stagger bool
-		FSpeed  struct {
+		Stagger     bool
+		ColStagger  bool
+		ColStaggers [10]float64
+		FSpeed      struct {
 			SFB       float64
 			DSFB      float64
 			KeyTravel float64
@@ -85,20 +89,25 @@ type UserConfig struct {
 }
 
 type UserInteractive struct {
-	Awaps     []Pos
-	Bswaps    []Pos
-	Swapnum   int
-	Pins      [][]string
-	Threshold float64
+	Aswaps        []Pos
+	Bswaps        []Pos
+	Swapnum       int
+	Pins          [][]string
+	Threshold     float64
+	InInteractive bool
+	Layout        Layout
+	LayoutWidth   int
 }
 
 type UserData struct {
 	// From globals.go
-	StaggerFlag   bool
-	SlideFlag     bool
-	DynamicFlag   bool
-	ImproveFlag   bool
-	ImproveLayout Layout
+	StaggerFlag    bool
+	ColStaggerFlag bool
+	ColStaggers    [10]float64
+	SlideFlag      bool
+	DynamicFlag    bool
+	ImproveFlag    bool
+	ImproveLayout  Layout
 
 	Layouts               map[string]Layout
 	GeneratedFingermap    map[Finger][]Pos
@@ -110,6 +119,9 @@ type UserData struct {
 
 	// From main.go
 	Data TextData
+
+	// From generate.go
+	GoroutineCounter util.AtomicCounter
 
 	// other
 	Config      UserConfig
