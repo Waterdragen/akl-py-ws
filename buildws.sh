@@ -7,4 +7,4 @@ pip3 install --no-cache-dir -r requirements.txt &&
 (cd ./rust && cargo build --release) &&
 
 # Install go dependencies
-(cd ./go && go get ./...)
+(cd ./go && go get ./... && go build)
