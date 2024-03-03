@@ -7,7 +7,7 @@ COPY . /app
 WORKDIR /app
 
 # Install Go
-RUN apt-get update && apt install snapd
+RUN apt-get update && apt install snapd -y
 RUN apt-get update && snap install go --classic
 RUN go version
 
