@@ -7,7 +7,7 @@ COPY . /app
 WORKDIR /app
 
 # Install Go
-RUN apt-get update && apt-get upgrade -y && apt search golang && apt-get install golang -y
+RUN apt-get update && curl -L https://go.dev/dl/go1.22.0.linux-amd64.tar.gz --output /root/go1.22.0.linux-amd64.tar.gz && tar xvf /root/go1.22.0.linux-amd64.tar.gz
 
 # Install Python, pip, and python3-full
 RUN apt-get update && apt-get install -y python3 python3-pip python3-full
