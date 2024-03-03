@@ -7,7 +7,7 @@ COPY . /app
 WORKDIR /app
 
 # Install Go
-RUN apt-get update && snap install go --classic
+RUN apt-get update && apt-get install golang-1.21-go
 RUN go version
 
 # Install Python, pip, and python3-full
