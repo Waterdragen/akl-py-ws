@@ -8,7 +8,8 @@ WORKDIR /app
 
 # Install Go
 RUN apt-get update && apt install snapd -y
-RUN apt-get update && systemctl enable snapd.service && systemctl enable snapd && systemctl enable snapd.socket
+RUN service snapd start
+RUN systemctl enable snapd.service
 RUN snap install go --classic
 RUN go version
 
