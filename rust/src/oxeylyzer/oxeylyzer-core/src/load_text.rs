@@ -13,25 +13,25 @@ use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString, SmartStringMode};
 
-use actix::Addr;
+use std::sync::{Arc, Mutex};
+use actix_ws::Session;
 use oxeylyzer_ws::sender::Sendable;
-use oxeylyzer_ws::websocket::OxeylyzerWs;
 
 const FOUR_MB: u64 = 1024 * 1024 * 4;
 
 pub struct LoadText {
-    addr: Addr<OxeylyzerWs>,
+    session: Arc<Mutex<Session>>,
 }
 
-impl Sendable<OxeylyzerWs> for LoadText {
-    fn addr(&self) -> &Addr<OxeylyzerWs> {
-        &self.addr
+impl Sendable for LoadText {
+    fn session(&self) -> &Arc<Mutex<Session>> {
+        &self.session
     }
 }
 
 impl LoadText {
-    pub fn new(addr: Addr<OxeylyzerWs>) -> Self {
-        LoadText {addr}
+    pub fn new(session: Arc<Mutex<Session>>) -> Self {
+        LoadText {session}
     }
 
     pub fn load_raw(&self, language: &str) {

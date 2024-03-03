@@ -1,8 +1,9 @@
-use actix::Addr;
-use oxeylyzer_ws::messages::WsMessage;
-use oxeylyzer_ws::websocket::OxeylyzerWs;
 use crate::trigram_patterns::{TrigramPattern, TRIGRAM_COMBINATIONS};
 use crate::utility::*;
+
+use std::sync::{Arc, Mutex};
+use actix_ws::Session;
+use oxeylyzer_ws::sender::{send_message, SessionWrapper};
 
 pub type CharToFinger = [usize; 60];
 pub type Matrix<T> = [T; 30];
@@ -42,7 +43,7 @@ pub struct FastLayout {
     pub matrix: Matrix<u8>,
     pub char_to_finger: CharToFinger,
     pub score: f64,
-    addr: Option<Addr<OxeylyzerWs>>,
+    session_wrapper: Option<SessionWrapper>,
 }
 
 impl Default for FastLayout {
@@ -87,16 +88,18 @@ impl FastLayout {
             matrix: [u8::MAX; 30],
             char_to_finger: [usize::MAX; 60],
             score: 0.0,
-            addr: None,
+            session_wrapper: None,
         }
     }
 
-    pub fn set_addr(&mut self, addr: Addr<OxeylyzerWs>) {
-        self.addr = Some(addr.clone())
+    pub fn set_session(&mut self, session: Arc<Mutex<Session>>) {
+        self.session_wrapper = Some(SessionWrapper{session});
     }
 
     fn send(&self, msg: String) {
-        self.addr.as_ref().unwrap().do_send(WsMessage(msg));
+        if let Some(session_wrapper) = self.session_wrapper.clone() {
+            send_message(session_wrapper.session, msg);
+        }
     }
 
     pub fn layout_str(&self, con: &ConvertU8) -> String {

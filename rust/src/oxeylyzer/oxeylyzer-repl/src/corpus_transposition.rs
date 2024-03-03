@@ -5,9 +5,10 @@ use serde::Deserialize;
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
-use actix::Addr;
-use oxeylyzer_ws::messages::WsMessage;
-use oxeylyzer_ws::websocket::OxeylyzerWs;
+
+use std::sync::{Arc, Mutex};
+use actix_ws::Session;
+use oxeylyzer_ws::sender::send_message;
 
 #[derive(Deserialize, Default)]
 struct Multiple {
@@ -168,11 +169,13 @@ impl CorpusConfig {
             .collect::<Vec<_>>()
     }
 
-    pub fn new_translator(language: &str, preferred_folder: Option<&str>, addr: Addr<OxeylyzerWs>) -> Translator {
+    pub fn new_translator(language: &str, preferred_folder: Option<&str>, session: Arc<Mutex<Session>>) -> Translator {
         match Self::new(language, preferred_folder) {
             Ok(config) => config.translator(),
             Err(error) => {
-                addr.do_send(WsMessage(format!("{error}\nUsing a raw translator instead.")));
+                let session = Arc::clone(&session);
+                let message = format!("{error}\nUsing a raw translator instead.");
+                send_message(session, message);
                 Self::raw_translator()
             }
         }

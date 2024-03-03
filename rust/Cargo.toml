@@ -15,9 +15,14 @@ incremental = true
 
 [dependencies]
 actix = "0.13.1"
+actix-rt = "2.9.0"
 actix-web = "4.4.0"
-actix-web-actors = "4.2.0"
+actix-ws = "0.2.5"
+futures = "0.3.30"
+lazy_static = "1.4.0"
 pkg-config = "0.3.27"
+tokio = { version = "1", features = ["full"] }
+uuid = { version = "1.7.0" , features = ["v4"] }
 
 oxeylyzer-core = { path = "./src/oxeylyzer/oxeylyzer-core" }
 oxeylyzer-repl = { path = "./src/oxeylyzer/oxeylyzer-repl" }

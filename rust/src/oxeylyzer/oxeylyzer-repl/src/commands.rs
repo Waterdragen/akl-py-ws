@@ -1,6 +1,6 @@
-use actix::Addr;
+use std::sync::{Arc, Mutex};
+use actix_ws::Session;
 use oxeylyzer_ws::sender::Sendable;
-use oxeylyzer_ws::websocket::OxeylyzerWs;
 
 #[derive(Debug)]
 pub(crate) enum ArgumentType<'a> {
@@ -40,16 +40,16 @@ fn usage(command_name: &str, args: &[ArgumentType]) -> String {
 }
 
 pub struct Commands {
-    addr: Addr<OxeylyzerWs>,
+    session: Arc<Mutex<Session>>,
 }
-impl Sendable<OxeylyzerWs> for Commands {
-    fn addr(&self) -> &Addr<OxeylyzerWs> {
-        &self.addr
+impl Sendable for Commands {
+    fn session(&self) -> &Arc<Mutex<Session>> {
+        &self.session
     }
 }
 impl Commands {
-    pub(crate) fn new(addr: Addr<OxeylyzerWs>) -> Self {
-        Commands {addr }
+    pub(crate) fn new(session: Arc<Mutex<Session>>) -> Self {
+        Commands { session }
     }
 
     pub(crate) fn send_help(&self, command_name: &str, about: &str, args: &[ArgumentType]) {
