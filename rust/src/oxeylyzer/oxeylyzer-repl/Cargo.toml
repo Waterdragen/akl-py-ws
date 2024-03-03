@@ -21,7 +21,7 @@ itertools = "0.10.3"
 
 actix = "0.13.1"
 actix-web = "4.4.0"
-actix-web-actors = "4.2.0"
+actix-ws = "0.2.5"
 pkg-config = "0.3.27"
 
 oxeylyzer-ws = { path = "../oxeylyzer-ws" }

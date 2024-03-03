@@ -4,38 +4,44 @@ use std::path::Path;
 use getargs::Options;
 use indexmap::IndexMap;
 use itertools::Itertools;
-use oxeylyzer_core::{generate::LayoutGeneration, layout::*, load_text::LoadText, weights::Config};
+use oxeylyzer_core::{generate::LayoutGeneration, layout::*, weights::Config};
 
 use crate::commands::{ArgumentType, Commands};
-use crate::corpus_transposition::CorpusConfig;
 use crate::tui::TUI;
 use ArgumentType::*;
 
-use actix::Addr;
-use oxeylyzer_ws::messages::WsMessage;
+use std::sync::{Arc, Mutex};
+use actix_ws::Session;
 use oxeylyzer_ws::sender::Sendable;
-use oxeylyzer_ws::websocket::OxeylyzerWs;
 
-pub struct Repl {
+pub struct UserData {
     language: String,
     gen: LayoutGeneration,
     saved: IndexMap<String, FastLayout>,
     temp_generated: Vec<FastLayout>,
     pins: Vec<usize>,
-    addr: Addr<OxeylyzerWs>,
 }
 
-impl Sendable<OxeylyzerWs> for Repl {
-    fn addr(&self) -> &Addr<OxeylyzerWs> {
-        &self.addr
+pub struct Repl {
+    user_data: UserData,
+    session: Arc<Mutex<Session>>,
+}
+
+impl Sendable for Repl {
+    fn session(&self) -> &Arc<Mutex<Session>> {
+        &self.session
     }
 }
 
 impl Repl {
-    pub fn new<P>(generator_base_path: P, addr: Addr<OxeylyzerWs>) -> Result<Self, String>
+    fn new<P>(generator_base_path: P, session: Arc<Mutex<Session>>, user_data: Option<UserData>) -> Result<Self, String>
     where
         P: AsRef<Path>,
     {
+        if let Some(user_data) = user_data {
+            return Ok(Self{user_data, session});
+        }
+
         let config = Config::new();
         let language = config.defaults.language.clone();
         let pins = config.pins.clone();
@@ -44,61 +50,85 @@ impl Repl {
             config.defaults.language.clone().as_str(),
             generator_base_path.as_ref(),
             Some(config),
-            addr.clone(),
+            Arc::clone(&session),
         )
         .expect(format!("Could not read language data for {}", language).as_str());
 
-        Ok(Self {
-            saved: gen
-                .load_layouts(
-                    generator_base_path.as_ref().join("layouts"),
-                    language.as_str(),
-                )
-                .map_err(|e| e.to_string())?,
-            language,
-            gen,
-            temp_generated: Vec::new(),
-            pins,
-            addr,
-        })
+        Ok(
+            Self {
+            user_data: UserData {
+                saved: gen
+                        .load_layouts(
+                            generator_base_path.as_ref().join("layouts"),
+                            language.as_str(),
+                        )
+                        .map_err(|e| e.to_string())?,
+                language,
+                gen,
+                temp_generated: Vec::new(),
+                pins,
+                },
+            session: Arc::clone(&session),
+            }
+        )
     }
 
-    pub fn run(addr: Addr<OxeylyzerWs>, command: String) -> Result<(), String> {
-        let inst = Self::new("static", addr.clone());
+    pub fn run(command: String, session: Arc<Mutex<Session>>, user_data: Option<UserData>) -> Result<Self, String> {
+        let inst = Self::new("static", Arc::clone(&session), user_data);
         if let Err(err) = inst {
-            panic!("New instance failed, msg: {}", err);
+            return Err(format!("New instance failed, msg: {}", err));
         }
         let mut env = inst.unwrap();
 
+        let wants_exit = env.post_run(command);
+
+        if wants_exit {
+            let inst = Self::new("static", Arc::clone(&session), None);
+            if let Err(err) = inst {
+                return Err(format!("New instance failed, msg: {}", err));
+            }
+            env = inst.unwrap();
+        }
+
+        Ok(env)
+    }
+
+    fn post_run(&mut self, command: String) -> bool {
         let line = command.clone();
         let line = line.trim();
         if line.is_empty() {
-            addr.clone().do_send(WsMessage(String::from("[DONE]")));
-            return Ok(());
+            self.send("[DONE]");
+            return false;
         }
-
-        match env.respond(line) {
-            Ok(_wants_exit) => (),
+        match self.respond(line) {
+            Ok(wants_exit) => {
+                if wants_exit {
+                    return true;
+                }
+            },
             Err(err) => {
-                addr.clone().do_send(WsMessage(format!("{err}")));
+                self.send(format!("{err}"));
             }
         }
-        addr.clone().do_send(WsMessage(String::from("[DONE]")));
-
-        Ok(())
+        self.send("[DONE]");
+        false
     }
 
-    pub fn rank(&self) {
-        for (name, layout) in self.saved.iter() {
+    pub fn get_user_data(self) -> UserData {
+        self.user_data
+    }
+
+    fn rank(&self) {
+        for (name, layout) in self.user_data.saved.iter() {
             self.sendln(format!("{:10}{}", format!("{:.3}:", layout.score), name));
         }
     }
 
-    pub fn layout_by_name(&self, name: &str) -> Option<&FastLayout> {
-        self.saved.get(name)
+    fn layout_by_name(&self, name: &str) -> Option<&FastLayout> {
+        self.user_data.saved.get(name)
     }
 
-    pub fn analyze_name(&self, name: &str) {
+    fn analyze_name(&self, name: &str) {
         let l = match self.layout_by_name(name) {
             Some(layout) => layout,
             None => {
@@ -116,18 +146,19 @@ impl Repl {
                 .into_iter()
                 .map(|b| *b)
                 .collect::<Vec<u8>>();
-            let mut new_name = self.gen.data.convert_u8.as_str(new_name_bytes.as_slice());
+            let mut new_name = self.user_data.gen.data.convert_u8.as_str(new_name_bytes.as_slice());
 
             new_name.push_str(format!("{}", i).as_str());
 
-            if !self.saved.contains_key(&new_name) {
+            if !self.user_data.saved.contains_key(&new_name) {
                 return Ok(new_name);
             }
         }
         Err("Could not find a good placeholder name for the layout.".to_string())
     }
 
-    pub fn save(&mut self, mut layout: FastLayout, name: Option<String>) -> Result<(), String> {
+    #[allow(dead_code)]
+    fn save(&mut self, mut layout: FastLayout, name: Option<String>) -> Result<(), String> {
         let new_name = if let Some(n) = name {
             n.replace(" ", "_")
         } else {
@@ -138,35 +169,35 @@ impl Repl {
             .write(true)
             .create(true)
             .truncate(true)
-            .open(format!("static/layouts/{}/{}.kb", self.language, new_name))
+            .open(format!("./src/oxeylyzer/static/layouts/{}/{}.kb", self.user_data.language, new_name))
             .map_err(|e| e.to_string())?;
 
-        let layout_formatted = layout.formatted_string(&self.gen.data.convert_u8);
+        let layout_formatted = layout.formatted_string(&self.user_data.gen.data.convert_u8);
         self.sendln(format!("saved {}\n{}", new_name, layout_formatted));
         f.write(layout_formatted.as_bytes()).unwrap();
 
-        layout.score = self.gen.score(&layout);
-        self.saved.insert(new_name, layout);
-        self.saved
+        layout.score = self.user_data.gen.score(&layout);
+        self.user_data.saved.insert(new_name, layout);
+        self.user_data.saved
             .sort_by(|_, a, _, b| a.score.partial_cmp(&b.score).unwrap());
 
         Ok(())
     }
 
-    pub fn analyze(&self, layout: &FastLayout) {
-        let stats = self.gen.get_layout_stats(layout);
+    fn analyze(&self, layout: &FastLayout) {
+        let stats = self.user_data.gen.get_layout_stats(layout);
         let score = if layout.score == 0.000 {
-            self.gen.score(layout)
+            self.user_data.gen.score(layout)
         } else {
             layout.score
         };
 
-        let layout_str = TUI::heatmap_string(&self.gen.data, layout);
+        let layout_str = TUI::heatmap_string(&self.user_data.gen.data, layout);
 
         self.sendln(format!("{}\n{}\nScore: {:.3}", layout_str, stats, score));
     }
 
-    pub fn compare_name(&self, name1: &str, name2: &str) {
+    fn compare_name(&self, name1: &str, name2: &str) {
         let l1 = match self.layout_by_name(name1) {
             Some(layout) => layout,
             None => {
@@ -186,7 +217,7 @@ impl Repl {
         for y in 0..3 {
             for (n, layout) in [l1, l2].into_iter().enumerate() {
                 for x in 0..10 {
-                    layouts_str.push_str(&format!("{} ", TUI::heatmap_heat(&self.gen.data, layout.c(x + 10 * y))));
+                    layouts_str.push_str(&format!("{} ", TUI::heatmap_heat(&self.user_data.gen.data, layout.c(x + 10 * y))));
                     if x == 4 {
                         layouts_str.push_str(" ");
                     }
@@ -198,8 +229,8 @@ impl Repl {
             layouts_str.push_str("\n");
         }
         self.send(layouts_str);
-        let s1 = self.gen.get_layout_stats(l1);
-        let s2 = self.gen.get_layout_stats(l2);
+        let s1 = self.user_data.gen.get_layout_stats(l1);
+        let s2 = self.user_data.gen.get_layout_stats(l2);
         let ts1 = s1.trigram_stats;
         let ts2 = s2.trigram_stats;
         self.sendln(format!(
@@ -273,27 +304,27 @@ impl Repl {
     }
 
     fn get_nth(&self, nr: usize) -> Option<FastLayout> {
-        if nr < self.temp_generated.len() {
-            let l = self.temp_generated[nr].clone();
+        if nr < self.user_data.temp_generated.len() {
+            let l = self.user_data.temp_generated[nr].clone();
             Some(l)
         } else {
-            if self.temp_generated.len() == 0 {
-                self.sendln(format!("You haven't generated any layouts yet!"));
+            if self.user_data.temp_generated.len() == 0 {
+                self.sendln("You haven't generated any layouts yet!");
             } else {
-                self.sendln(format!("That's not a valid index!"));
+                self.sendln("That's not a valid index!");
             }
             None
         }
     }
 
-    pub fn sfr_freq(&self) -> f64 {
-        let len = self.gen.data.characters.len();
+    fn sfr_freq(&self) -> f64 {
+        let len = self.user_data.gen.data.characters.len();
         let chars = 0..len;
         chars
             .clone()
             .cartesian_product(chars)
             .filter(|(i1, i2)| i1 == i2)
-            .map(|(c1, c2)| self.gen.data.bigrams.get(c1 * len + c2).unwrap_or(&0.0))
+            .map(|(c1, c2)| self.user_data.gen.data.bigrams.get(c1 * len + c2).unwrap_or(&0.0))
             .sum()
     }
 
@@ -301,11 +332,35 @@ impl Repl {
         if let Some(layout) = self.layout_by_name(name) {
             self.sendln(format!("top {} sfbs for {name}:", top_n.min(48)));
 
-            for (bigram, freq) in self.gen.sfbs(layout, top_n) {
+            for (bigram, freq) in self.user_data.gen.sfbs(layout, top_n) {
                 self.sendln(format!("{bigram}: {:.3}%", freq * 100.0))
             }
         } else {
             self.sendln(format!("layout {name} does not exist!"))
+        }
+    }
+
+    fn load_language(&mut self, language: &str, config: Config) {
+        if let Ok(generator) = LayoutGeneration::new(
+            language,
+            "static",
+            Some(config),
+            self.new_session(),
+        ) {
+            let user_data = &mut self.user_data;
+            user_data.language = language.to_string();
+            user_data.gen = generator;
+            user_data.saved = user_data.gen.load_layouts(
+                "static/layouts",
+                language
+            ).expect("couldn't load layouts lol");
+
+            self.sendln(format!(
+                "Set language to {}. Sfr: {:.2}%",
+                language, self.sfr_freq() * 100.0
+            ));
+        } else {
+            self.sendln(format!("Could not load data for {language}"));
         }
     }
 
@@ -323,9 +378,9 @@ impl Repl {
                         }
 
                         self.sendln(format!("generating {} layouts...", count_str));
-                        self.temp_generated = TUI::new(self.addr.clone()).generate_n(&self.gen, count);
+                        self.user_data.temp_generated = TUI::new(self.new_session()).generate_n(&self.user_data.gen, count);
                     } else {
-                        Commands::new(self.addr.clone()).send_error("generate", &[R("amount")]);
+                        Commands::new(self.new_session()).send_error("generate", &[R("amount")]);
                     }
                 }
             }
@@ -333,13 +388,18 @@ impl Repl {
                 if let Some(name) = args.next_positional() {
                     if let Some(amount_str) = args.next_positional() {
                         if let Ok(amount) = usize::from_str_radix(amount_str, 10) {
+                            if amount > 500 {
+                                self.sendln(String::from("Cannot generate more than 500 layouts in demo mode"));
+                                return Ok(true);
+                            }
+
                             if let Some(l) = self.layout_by_name(name) {
-                                self.temp_generated = TUI::new(self.addr.clone()).generate_n_with_pins(&self.gen, amount, l.clone(), &self.pins);
+                                self.user_data.temp_generated = TUI::new(self.new_session()).generate_n_with_pins(&self.user_data.gen, amount, l.clone(), &self.user_data.pins);
                             } else {
                                 self.sendln(format!("'{name}' does not exist!"))
                             }
                         } else {
-                            Commands::new(self.addr.clone()).send_error("improve", &[R("name"), R("amount")]);
+                            Commands::new(self.new_session()).send_error("improve", &[R("name"), R("amount")]);
                         }
                     }
                 }
@@ -355,7 +415,7 @@ impl Repl {
                         self.analyze_name(name_or_nr);
                     }
                 } else {
-                    Commands::new(self.addr.clone()).send_error("analyze", &[R("name or number")]);
+                    Commands::new(self.new_session()).send_error("analyze", &[R("name or number")]);
                 }
             }
             Some("compare") | Some("c") | Some("comp") | Some("cmopare") | Some("comprae") => {
@@ -363,7 +423,7 @@ impl Repl {
                     if let Some(layout2) = args.next_positional() {
                         self.compare_name(layout1, layout2);
                     } else {
-                        Commands::new(self.addr.clone()).send_error("compare", &[R("layout 1"), R("layout 2")]);
+                        Commands::new(self.new_session()).send_error("compare", &[R("layout 1"), R("layout 2")]);
                     }
                 }
             }
@@ -373,109 +433,38 @@ impl Repl {
                         if let Ok(top_n) = usize::from_str_radix(top_n_str, 10) {
                             self.sfbs(name, top_n)
                         } else {
-                            Commands::new(self.addr.clone()).send_error("ngram", &[R("name"), O("top n")]);
+                            Commands::new(self.new_session()).send_error("ngram", &[R("name"), O("top n")]);
                         }
                     } else {
                         self.sfbs(name, 10);
                     }
                 } else {
-                    Commands::new(self.addr.clone()).send_error("ngram", &[R("name"), O("top n")]);
+                    Commands::new(self.new_session()).send_error("ngram", &[R("name"), O("top n")]);
                 }
             }
             Some("ngram") | Some("occ") | Some("n") => {
                 if let Some(ngram) = args.next_positional() {
-                    let s = format!("{}", TUI::get_ngram_info(&mut self.gen.data, ngram));
+                    let s = format!("{}", TUI::get_ngram_info(&mut self.user_data.gen.data, ngram));
                     self.sendln(s);
                 } else {
-                    Commands::new(self.addr.clone()).send_error("ngram", &[R("ngram")]);
+                    Commands::new(self.new_session()).send_error("ngram", &[R("ngram")]);
                 }
             }
             Some("load") => {
-                use getargs::Opt::*;
-                let opt1 = args.next_opt();
-
-                if matches!(opt1, Ok(Some(Short('a'))) | Ok(Some(Long("all")))) {
-                    for (language, config) in CorpusConfig::all() {
-                        self.sendln(format!("loading data for language: {language}..."));
-                        LoadText::new(self.addr.clone()).load_data(language.as_str(), config.translator())
-                            .map_err(|e| e.to_string())?;
-                    }
-                } else if let Some(language) = args.next_positional() {
-                    let opt2 = args.next_opt();
-                    if matches!(opt1, Ok(Some(Short('r'))) | Ok(Some(Long("raw"))))
-                    || matches!(opt2, Ok(Some(Short('r'))) | Ok(Some(Long("raw")))) {
-                        self.sendln(format!("loading raw data for language: {language}..."));
-                        LoadText::new(self.addr.clone()).load_raw(language);
-                    } else {
-                        let preferred_folder = args.next_positional();
-                        let translator = CorpusConfig::new_translator(language, preferred_folder, self.addr.clone());
-                        let is_raw_translator = translator.is_raw;
-
-                        self.sendln(format!("loading data for {language}..."));
-                        LoadText::new(self.addr.clone()).load_data(language, translator)
-                            .map_err(|e| e.to_string())?;
-
-                        if !is_raw_translator {
-                            let config = Config::new();
-                            if let Ok(generator) = LayoutGeneration::new(
-                                language,
-                                "static",
-                                Some(config),
-                                self.addr.clone(),
-                            ) {
-                                self.language = language.to_string();
-                                self.gen = generator;
-                                self.saved = self.gen.load_layouts(
-                                    "static/layouts",
-                                    language
-                                ).expect("couldn't load layouts lol");
-
-                                self.sendln(format!(
-                                    "Set language to {}. Sfr: {:.2}%",
-                                    language, self.sfr_freq() * 100.0
-                                ));
-                            } else {
-                                self.sendln(format!("Could not load data for {language}"));
-                            }
-                        }
-                    }
-                } else {
-                    Commands::new(self.addr.clone()).send_error(
-                        "load",
-                        &[R("language"), O("preferred_config_folder"), A("raw")]
-                    );
-                }
+                self.sendln("Unsupported feature in demo mode");
+                return Ok(false)
             }
             Some("language") | Some("lanugage") | Some("langauge") | Some("lang") | Some("l") => {
                 match args.next_positional() {
                     Some(language) => {
                         let config = Config::new();
-                        if let Ok(generator) = LayoutGeneration::new(
-                            language,
-                            "static",
-                            Some(config),
-                            self.addr.clone(),
-                        ) {
-                            self.language = language.to_string();
-                            self.gen = generator;
-                            self.saved = self.gen.load_layouts(
-                                "static/layouts",
-                                language
-                            ).expect("couldn't load layouts lol");
-
-                            self.sendln(format!(
-                                "Set language to {}. Sfr: {:.2}%",
-                                language, self.sfr_freq() * 100.0
-                            ));
-                        } else {
-                            self.sendln(format!("Could not load data for {language}"));
-                        }
+                        self.load_language(language, config);
                     }
-                    None => self.sendln(format!("Current language: {}", self.language))
+                    None => self.sendln(format!("Current language: {}", self.user_data.language))
                 }
             }
             Some("languages") | Some("langs") => {
-                std::fs::read_dir("static/language_data")
+                std::fs::read_dir("./src/oxeylyzer/static/language_data")
                     .unwrap()
                     .flatten()
                     .map(|p| p
@@ -489,126 +478,126 @@ impl Repl {
             }
             Some("reload") | Some("r") => {
                 let config = Config::new();
-                self.pins = config.pins.clone();
+                self.user_data.pins = config.pins.clone();
 
                 if let Ok(generator) = LayoutGeneration::new(
-                    self.language.as_str(),
+                    self.user_data.language.as_str(),
                     "static",
                     Some(config),
-                    self.addr.clone(),
+                    self.new_session(),
                 ) {
-                    self.gen = generator;
-                    self.saved = self.gen.load_layouts(
+                    self.user_data.gen = generator;
+                    self.user_data.saved = self.user_data.gen.load_layouts(
                         "static/layouts",
-                        self.language.as_str()
+                        self.user_data.language.as_str()
                     ).expect("couldn't load layouts lol");
                 } else {
-                    self.sendln(format!("Could not load {}", self.language));
+                    self.sendln(format!("Could not load {}", self.user_data.language));
                 }
             }
             Some("save") | Some("s") => {
-                self.sendln(format!("Unsupported feature in demo mode"));
-                return Ok(true)
+                self.sendln("Unsupported feature in demo mode");
+                return Ok(false)
             }
             Some("quit") | Some("exit") | Some("q") => {
-                self.sendln(format!("Exiting analyzer..."));
+                self.sendln("Exiting analyzer...");
                 return Ok(true)
             }
             Some("help") | Some("--help") | Some("h") | Some("-h") => {
                 match args.next_positional() {
                     Some("generate") | Some("gen") | Some("g") => {
-                        Commands::new(self.addr.clone()).send_help(
+                        Commands::new(self.new_session()).send_help(
                             "generate", 
                             "(g, gen) Generate a number of layouts and shows the best 10, All layouts generated are accessible until reloading or quiting.",
                             &[R("amount")]
                         )
                     }
                     Some("improve") | Some("i") => {
-                        Commands::new(self.addr.clone()).send_help(
+                        Commands::new(self.new_session()).send_help(
                             "improve",
                             "(i) Save the top <number> result that was generated.",
                             &[R("name"), R("amount")]
                         )
                     }
                     Some("rank") => {
-                        Commands::new(self.addr.clone()).send_help(
+                        Commands::new(self.new_session()).send_help(
                             "rank",
                             "(sort) Rank all layouts in set language by score using values set from 'config.toml'",
                             &[]
                         )
                     }
                     Some("analyze") | Some("layout") | Some("a") => {
-                        Commands::new(self.addr.clone()).send_help(
+                        Commands::new(self.new_session()).send_help(
                             "analyze",
                             "(a, layout) Show details of layout.",
                             &[R("name or number")]
                         )
                     }
                     Some("compare") | Some("c") | Some("cmp") | Some("cmopare") | Some("comprae") => {
-                        Commands::new(self.addr.clone()).send_help(
+                        Commands::new(self.new_session()).send_help(
                             "compare",
                             "(c, cmp) Compare 2 layouts.",
                             &[R("layout 1"), R("layout 2")]
                         )
                     }
                     Some("sfbs") | Some("sfb") => {
-                        Commands::new(self.addr.clone()).send_help(
+                        Commands::new(self.new_session()).send_help(
                             "sfbs",
                             "(sfbs, sfb) Shows the top n sfbs for a certain layout.",
                             &[R("name"), O("top n")]
                         )
                     }
                     Some("ngram") | Some("occ") | Some("n") => {
-                        Commands::new(self.addr.clone()).send_help(
+                        Commands::new(self.new_session()).send_help(
                             "ngram",
                             "(n, occ) Gives information about a certain ngram. for 2 letter ones, skipgram info will be provided as well.",
                             &[R("ngram")]
                         )
                     }
                     Some("load") => {
-                        Commands::new(self.addr.clone()).send_help(
+                        Commands::new(self.new_session()).send_help(
                             "load",
                             "Generates corpus for <language>. Will be include everything but spaces if the language is not known.",
                             &[R("language"), O("preferred_config_folder"), A("raw")]
                         )
                     }
                     Some("language") | Some("lanugage") | Some("langauge") | Some("lang") | Some("l") => {
-                        Commands::new(self.addr.clone()).send_help(
+                        Commands::new(self.new_session()).send_help(
                             "language",
                             "(l, lang) Sets a language to be used for analysis.",
                             &[R("language")]
                         )
                     }
                     Some("languages") | Some("langs") => {
-                        Commands::new(self.addr.clone()).send_help(
+                        Commands::new(self.new_session()).send_help(
                             "languages",
                             "(langs) Shows available languages.",
                             &[]
                         )
                     }
                     Some("reload") | Some("r") => {
-                        Commands::new(self.addr.clone()).send_help(
+                        Commands::new(self.new_session()).send_help(
                             "reload",
                             "(r) Reloads all data with the current language. Loses temporary layouts.",
                             &[]
                         )
                     }
                     Some("save") | Some("s") => {
-                        Commands::new(self.addr.clone()).send_help(
+                        Commands::new(self.new_session()).send_help(
                             "save",
                             "(s) Saves the top <number> result that was generated. Starts from 0 up to the number generated.",
                             &[R("index"), O("name")]
                         )
                     }
                     Some("quit") | Some("exit") | Some("q") => {
-                        Commands::new(self.addr.clone()).send_help(
+                        Commands::new(self.new_session()).send_help(
                             "quit",
                             "(q) Quit the repl",
                             &[]
                         )
                     }
                     Some("help") | Some("--help") | Some("h") | Some("-h") => {
-                        Commands::new(self.addr.clone()).send_help(
+                        Commands::new(self.new_session()).send_help(
                             "help",
                             "Print this message or the help of the given subcommand(s)",
                             &[O("subcommand")]

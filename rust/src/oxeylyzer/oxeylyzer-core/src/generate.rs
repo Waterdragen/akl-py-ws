@@ -1,7 +1,6 @@
 use std::hash::BuildHasherDefault;
 use std::hint::unreachable_unchecked;
 use std::path::Path;
-use actix::Addr;
 
 use anyhow::Result;
 use fxhash::FxHashMap;
@@ -15,7 +14,8 @@ use crate::trigram_patterns::TrigramPattern;
 use crate::utility::*;
 use crate::weights::{Config, Weights};
 
-use oxeylyzer_ws::websocket::OxeylyzerWs;
+use std::sync::{Arc, Mutex};
+use actix_ws::Session;
 use oxeylyzer_ws::sender::Sendable;
 
 #[cfg(test)]
@@ -173,7 +173,6 @@ pub struct LayoutCache {
     fspeed: [f64; 8],
     fspeed_total: f64,
 
-    // trigrams: FxHashMap<(char, Option<char>), f64>,
     trigrams_total: f64,
 
     total_score: f64,
@@ -228,17 +227,17 @@ pub struct LayoutGeneration {
     pub weights: Weights,
     pub layouts: IndexMap<String, FastLayout, BuildHasherDefault<fxhash::FxHasher>>,
 
-    addr: Addr<OxeylyzerWs>,
+    session: Arc<Mutex<Session>>,
 }
 
-impl Sendable<OxeylyzerWs> for LayoutGeneration {
-    fn addr(&self) -> &Addr<OxeylyzerWs> {
-        &self.addr
+impl Sendable for LayoutGeneration {
+    fn session(&self) -> &Arc<Mutex<Session>> {
+        &self.session
     }
 }
 
 impl LayoutGeneration {
-    pub fn new<P>(language: &str, base_path: P, config: Option<Config>, addr: Addr<OxeylyzerWs>) -> Result<Self>
+    pub fn new<P>(language: &str, base_path: P, config: Option<Config>, session: Arc<Mutex<Session>>) -> Result<Self>
     where
         P: AsRef<Path>,
     {
@@ -276,7 +275,7 @@ impl LayoutGeneration {
                 weights: config.weights,
                 layouts: IndexMap::default(),
 
-                addr,
+                session,
             })
         } else {
             anyhow::bail!("Getting language data failed")
@@ -300,11 +299,6 @@ impl LayoutGeneration {
                 .filter(|p| is_kb_file(p))
                 .collect::<Vec<_>>();
 
-            // let stats_dir = base_directory.as_ref().join("stats").join(language);
-            // if let Ok(false) = std::fs::try_exists(stats_dir) {
-            // 	std::fs::create_dir_all(&stats_dir)?;
-            // }
-
             for entry in valid {
                 if let Some(name) = layout_name(&entry) {
                     let content = std::fs::read_to_string(entry.path())?;
@@ -312,7 +306,7 @@ impl LayoutGeneration {
                     let layout_bytes = self.convert_u8.to(layout_str.chars());
 
                     if let Ok(mut layout) = FastLayout::try_from(layout_bytes.as_slice()) {
-                        layout.set_addr(self.addr.clone());
+                        layout.set_session(self.new_session());
                         layout.score = self.score(&layout);
                         res.insert(name, layout);
 
@@ -371,14 +365,6 @@ impl LayoutGeneration {
         for (PosPair(i1, i2), _) in self.fspeed_vals {
             let c1 = unsafe { layout.cu(i1) } as usize;
             let c2 = unsafe { layout.cu(i2) } as usize;
-
-            // if c1 != self.repeat_key && c2 != self.repeat_key {
-            // 	res += data.get(c1 * len + c2).unwrap_or(&0.0);
-            // 	res += data.get(c2 * len + c1).unwrap_or(&0.0);
-            // } else {
-            // 	res += data.get(c1 * len + c2).unwrap_or(&0.0);
-            // 	res += data.get(c2 * len + c1).unwrap_or(&0.0);
-            // }
 
             res += data.get(c1 * len + c2).unwrap_or(&0.0);
             res += data.get(c2 * len + c1).unwrap_or(&0.0);
@@ -629,21 +615,6 @@ impl LayoutGeneration {
     fn pair_fspeed(&self, layout: &FastLayout, pair: &PosPair, dist: f64) -> f64 {
         let c1 = unsafe { layout.cu(pair.0) } as usize;
         let c2 = unsafe { layout.cu(pair.1) } as usize;
-        // if c1 != self.repeat_key && c1 != self.repeat_key {
-        // 	let mut res = 0.0;
-
-        // 	let len = self.data.characters.len();
-        // 	res += self.weighted_bigrams.get(c1 * len + c2).unwrap_or(&0.0) * dist;
-        // 	res += self.weighted_bigrams.get(c2 * len + c1).unwrap_or(&0.0) * dist;
-        // 	res
-        // } else {
-        // 	let mut res = 0.0;
-
-        // 	let len = self.data.characters.len();
-        // 	res += self.weighted_bigrams.get(c1 * len + c2).unwrap_or(&0.0) * dist * 0.5;
-        // 	res += self.weighted_bigrams.get(c2 * len + c1).unwrap_or(&0.0) * dist * 0.5;
-        // 	res
-        // }
         let mut res = 0.0;
 
         let len = self.data.characters.len();
@@ -764,10 +735,7 @@ impl LayoutGeneration {
             cache.lsbs
         };
 
-        // let _new_heur = cache.trigrams_total - scissors_score - effort_score - usage_score - fspeed_score;
-
         let trigrams_score = if cache.total_score < (f64::MAX) {
-            //new_heur + new_heur.abs() * 0.0) {
             let trigrams_end = self.trigram_char_score(layout, swap);
             unsafe { layout.swap_no_bounds(swap) };
             let trigrams_start = self.trigram_char_score(layout, swap);
@@ -935,7 +903,7 @@ impl LayoutGeneration {
 
     pub fn generate(&self) -> FastLayout {
         let mut layout = FastLayout::random(self.chars_for_generation);
-        layout.set_addr(self.addr.clone());
+        layout.set_session(self.new_session());
 
         let mut cache = self.initialize_cache(&layout);
 
@@ -1007,7 +975,7 @@ impl LayoutGeneration {
         possible_swaps: Option<&[PosPair]>,
     ) -> FastLayout {
         let mut layout = FastLayout::random_pins(based_on.matrix, pins);
-        layout.set_addr(self.addr.clone());
+        layout.set_session(self.new_session());
 
         let mut cache = self.initialize_cache(&layout);
 
@@ -1023,4 +991,3 @@ impl LayoutGeneration {
 }
 
 mod obsolete;
-// mod iterative;

@@ -1,16 +1,84 @@
 use http::StatusCode;
 use std::fs::File;
 use std::io::{BufReader, Read};
+use std::panic::catch_unwind;
+use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
 
-use actix_web::{App, Error, http, HttpRequest, HttpResponse, HttpServer, web};
-use actix_web_actors::ws;
-use oxeylyzer_ws::websocket::OxeylyzerWs;
-use oxeylyzer_repl::repl::Repl;
+use actix_web::{App, http, HttpRequest, HttpResponse, HttpServer, web};
+use actix_ws::Message;
+use futures::StreamExt;
+use lazy_static::lazy_static;
+use uuid::Uuid;
+
+use oxeylyzer_repl::repl::{Repl, UserData};
+use oxeylyzer_ws::sender::send_message;
 
 static SERVER_URL: &str = "127.0.0.1";
 static SERVER_PORT: u16 = 9001;
 
-async fn ws_main(req: HttpRequest, stream: web::Payload, path: web::Path<String>) -> Result<HttpResponse, Error> {
+lazy_static! {
+    static ref USERS_DATA: Arc<Mutex<HashMap<Uuid, Option<UserData>>>> = Arc::new(Mutex::new(HashMap::new()));
+}
+
+fn oxeylyzer_store_user_data(uuid: Uuid, user_data: Option<UserData>) {
+    USERS_DATA.lock().unwrap().insert(uuid, user_data);
+}
+
+fn oxeylyzer_remove_user_data(uuid: Uuid) -> Option<UserData> {
+    USERS_DATA.lock().unwrap().remove(&uuid).unwrap_or(None)
+}
+
+async fn oxeylyzer_ws_handler(req: HttpRequest, stream: web::Payload) -> Result<HttpResponse, actix_web::Error> {
+    let (response, session, mut msg_stream) = actix_ws::handle(&req, stream)?;
+
+    let session = Arc::new(Mutex::new(session));
+    let uuid = Uuid::new_v4();
+
+    println!("Websocket connection established");
+    actix_rt::spawn(async move {
+        oxeylyzer_store_user_data(uuid, None);
+
+        while let Some(Ok(msg)) = msg_stream.next().await {
+            match msg {
+                Message::Text(s) => {
+                    // Process the client's message here
+
+                    let s: String = s.to_string();
+                    let session_ref = Arc::clone(&session);
+
+                    tokio::task::spawn_blocking(move || {
+                        let res = catch_unwind(|| {
+                            let user_data = oxeylyzer_remove_user_data(uuid);
+
+                            let repl_res = Repl::run(s, Arc::clone(&session_ref), user_data);
+                            match repl_res {
+                                Ok(repl) => {
+                                    let user_data = repl.get_user_data();
+                                    oxeylyzer_store_user_data(uuid, Some(user_data));
+                                }
+                                Err(err) => {
+                                    send_message(Arc::clone(&session_ref), err);
+                                }
+                            }
+                        });
+                        if let Err(err) = res {
+                            eprintln!("{:?}", err);
+                            send_message(Arc::clone(&session_ref), format!("{:?}", err));
+                        }
+                    }).await.expect("failed to spawn blocking task");
+                }
+                _ => {}
+            }
+        }
+
+        oxeylyzer_remove_user_data(uuid);
+    });
+
+    Ok(response)
+}
+
+async fn ws_main(req: HttpRequest, stream: web::Payload, path: web::Path<String>) -> Result<HttpResponse, actix_web::Error> {
     // Handle HTTP requests
     if !req.headers().contains_key("upgrade") {
         return Ok(bad_request().await.into());
@@ -19,7 +87,9 @@ async fn ws_main(req: HttpRequest, stream: web::Payload, path: web::Path<String>
     // Handle websocket requests
     let tail = path.trim_end_matches("/");
     match tail {
-        "oxeylyzer" => ws::start(OxeylyzerWs::new(Repl::run), &req, stream),
+        "oxeylyzer" => {
+            oxeylyzer_ws_handler(req, stream).await
+        },
         _ => Ok(bad_request().await.into()),
     }
 

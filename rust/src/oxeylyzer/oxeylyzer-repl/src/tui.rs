@@ -6,24 +6,24 @@ use oxeylyzer_core::rayon::iter::ParallelIterator;
 use ansi_rgb::{rgb, Colorable};
 use indicatif::ProgressBar;
 
-use actix::Addr;
+use std::sync::{Arc, Mutex};
+use actix_ws::Session;
 use oxeylyzer_ws::sender::Sendable;
-use oxeylyzer_ws::websocket::OxeylyzerWs;
 use std::time::Duration;
 
 pub(crate) struct TUI {
-    addr: Addr<OxeylyzerWs>,
+    session: Arc<Mutex<Session>>,
 }
 
-impl Sendable<OxeylyzerWs> for TUI {
-    fn addr(&self) -> &Addr<OxeylyzerWs> {
-        &self.addr
+impl Sendable for TUI {
+    fn session(&self) -> &Arc<Mutex<Session>> {
+        &self.session
     }
 }
 
 impl TUI {
-    pub fn new(addr: Addr<OxeylyzerWs>) -> Self {
-        TUI {addr}
+    pub fn new(session: Arc<Mutex<Session>>) -> Self {
+        TUI {session}
     }
 
     pub fn heatmap_heat(data: &LanguageData, c: u8) -> String {
