@@ -7,7 +7,8 @@ COPY . /app
 WORKDIR /app
 
 # Install Go
-RUN apt-get update && curl -O https://go.dev/dl/go1.21.7.linux-amd64.tar.gz && rm -rf /root/go && tar -C /root/go -xvf go1.21.7.linux-amd64.tar.gz
+RUN apt-get update && snap install go --classic
+RUN go version
 
 # Install Python, pip, and python3-full
 RUN apt-get update && apt-get install -y python3 python3-pip python3-full
