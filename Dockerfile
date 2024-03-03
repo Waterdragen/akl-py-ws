@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y python3 python3-pip python3-full
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
 
 # Install Go
-RUN apt-get update && apt install golang-1.21-go
+RUN apt-get update && curl -O https://go.dev/dl/go1.21.7.linux-amd64.tar.gz && tar -C /root -xzf go1.21.7.linux-amd64.tar.gz
 
 # Create and activate a python virtual environment
 RUN python3 -m venv /venv
