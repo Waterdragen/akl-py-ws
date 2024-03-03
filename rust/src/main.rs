@@ -64,6 +64,7 @@ async fn oxeylyzer_ws_handler(req: HttpRequest, stream: web::Payload) -> Result<
                         });
                         if let Err(err) = res {
                             eprintln!("{:?}", err);
+                            send_message(Arc::clone(&session_ref), format!("{:?}", err));
                         }
                     }).await.expect("failed to spawn blocking task");
                 }
