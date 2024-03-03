@@ -6,14 +6,14 @@ FROM nginx
 COPY . /app
 WORKDIR /app
 
+# Install Go
+RUN apt-get update && curl -o https://go.dev/dl/go1.21.7.linux-amd64.tar.gz && tar -C /root -xzf go1.21.7.linux-amd64.tar.gz
+
 # Install Python, pip, and python3-full
 RUN apt-get update && apt-get install -y python3 python3-pip python3-full
 
 # Install Rust
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
-
-# Install Go
-RUN apt-get update && curl -o https://go.dev/dl/go1.21.7.linux-amd64.tar.gz && tar -C /root -xzf go1.21.7.linux-amd64.tar.gz
 
 # Create and activate a python virtual environment
 RUN python3 -m venv /venv
