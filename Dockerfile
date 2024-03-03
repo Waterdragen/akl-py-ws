@@ -7,7 +7,7 @@ COPY . /app
 WORKDIR /app
 
 # Install Go
-RUN apt-get update && apt search golang && apt install golang
+RUN apt-get update && apt-get upgrade -y && apt-get search golang && apt-get install golang -y
 
 # Install Python, pip, and python3-full
 RUN apt-get update && apt-get install -y python3 python3-pip python3-full
