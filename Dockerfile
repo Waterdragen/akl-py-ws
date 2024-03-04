@@ -9,7 +9,7 @@ WORKDIR /app
 # Install Go
 RUN apt-get update && mkdir -p /root/go && \
     curl -L https://go.dev/dl/go1.22.0.linux-amd64.tar.gz --output /root/go/go1.22.0.linux-amd64.tar.gz && \
-    tar -C /root/go xvf /root/go/go1.22.0.linux-amd64.tar.gz
+    tar xvf /root/go/go1.22.0.linux-amd64.tar.gz
 
 # Install Python, pip, and python3-full
 RUN apt-get update && apt-get install -y python3 python3-pip python3-full
@@ -28,8 +28,8 @@ ENV RUSTUP_HOME="/root/.rustup" \
     RUST_VERSION="1.75.0"
     
 # Add go environment
-ENV GOPATH="/root/go" \
-    PATH="/root/go/bin:${PATH}"
+ENV GOPATH="/root/go/go" \
+    PATH="/root/go/go/bin:${PATH}"
     
 RUN cargo --version; \
     rustup --version; \
