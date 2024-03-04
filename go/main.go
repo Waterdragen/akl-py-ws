@@ -60,7 +60,7 @@ func main() {
 		c.HTML(http.StatusBadRequest, "bad_request.html", nil)
 	})
 
-	err := router.Run(PORT)
+	err := router.Run("localhost" + PORT)
 	if err != nil {
 		log.Fatal("Failed to start server:", err)
 	}
