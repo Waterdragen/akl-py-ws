@@ -10,6 +10,9 @@ WORKDIR /app
 RUN apt-get update && mkdir -p /root/go && \
     curl -L https://go.dev/dl/go1.22.0.linux-amd64.tar.gz --output /root/go/go1.22.0.linux-amd64.tar.gz && \
     tar xvf /root/go/go1.22.0.linux-amd64.tar.gz
+RUN ls /root
+RUN ls /root/go
+RUN ls /root/go/go
 
 # Install Python, pip, and python3-full
 RUN apt-get update && apt-get install -y python3 python3-pip python3-full
