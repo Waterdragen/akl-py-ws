@@ -7,7 +7,7 @@ import (
 )
 
 type ConnUsers struct {
-	mu   sync.Mutex
+	mu   sync.RWMutex
 	data map[uint64]*genkey.UserData
 }
 
