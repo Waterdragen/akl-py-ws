@@ -4,11 +4,11 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"unsafe"
 
 	genkey "github.com/waterdragen/akl-ws/genkey"
 
 	gin "github.com/gin-gonic/gin"
+	uuid "github.com/google/uuid"
 	websocket "github.com/gorilla/websocket"
 )
 
@@ -110,6 +110,6 @@ func genkeyWebsocket(conn *websocket.Conn) {
 	}
 }
 
-func generateConnID(conn *websocket.Conn) uint64 {
-	return uint64(uintptr((unsafe.Pointer(conn))))
+func generateConnID(conn *websocket.Conn) uint32 {
+	return uuid.New().ID()
 }
