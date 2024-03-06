@@ -358,6 +358,9 @@ func (self *GenkeyMain) commandUsage(command *Command) {
 }
 
 func (self *GenkeyMain) Run(input string) {
+	self.userData.mu.Lock()
+	defer self.userData.mu.Unlock()
+
 	fs := flag.NewFlagSet("myProgram", flag.ExitOnError)
 	args := strings.Fields(input)
 	userData := self.userData

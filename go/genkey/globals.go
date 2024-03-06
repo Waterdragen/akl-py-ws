@@ -17,6 +17,7 @@ package genkey
 import (
 	"os"
 	"path/filepath"
+	"sync"
 
 	util "github.com/waterdragen/akl-ws/util"
 )
@@ -100,6 +101,8 @@ type UserInteractive struct {
 }
 
 type UserData struct {
+	mu sync.RWMutex
+
 	// From globals.go
 	StaggerFlag    bool
 	ColStaggerFlag bool
