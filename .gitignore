@@ -20,3 +20,4 @@ go/.vscode
 go/akl-ws
 go/akl-ws.exe
 go/ws_test.go
+go/heatmap.png
