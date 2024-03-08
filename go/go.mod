@@ -9,6 +9,7 @@ require (
 	github.com/gorilla/websocket v1.5.1
 	github.com/wayneashleyberry/truecolor v1.0.1
 	github.com/google/uuid v1.6.0
+	github.com/virtuald/go-paniclog v0.0.0-20190812204905-43a7fa316459
 )
 
 require (
