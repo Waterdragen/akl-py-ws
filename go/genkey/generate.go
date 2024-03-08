@@ -16,6 +16,7 @@ package genkey
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"math/rand"
 	"sort"
@@ -151,6 +152,9 @@ func (self *GenkeyGenerate) Populate(n int) Layout {
 
 	analyzed := 0
 	goroCounter := &self.userData.GoroutineCounter
+	goroCounter.Reset()
+
+	log.Printf("goroCounter: %v\n", goroCounter)
 
 	for goroCounter.GetCount() > 1 {
 		self.SendMessage(fmt.Sprintf("%d greedy improving at %d analyzed/s       \r", goroCounter.GetCount()-1, self.userData.Analyzed-analyzed))

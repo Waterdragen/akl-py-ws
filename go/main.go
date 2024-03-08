@@ -1,10 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 
+	"github.com/virtuald/go-paniclog"
 	genkey "github.com/waterdragen/akl-ws/genkey"
 
 	gin "github.com/gin-gonic/gin"
@@ -67,8 +70,17 @@ func main() {
 }
 
 func genkeyWebsocket(conn *websocket.Conn) {
+	connID := generateConnID()
+	file, err := os.Create(fmt.Sprintf("panic-%v.log", connID))
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	paniclog.RedirectStderr(file)
+
 	defer func() {
-		connUsersData.Pop(generateConnID(conn))
+		connUsersData.Pop(connID)
 		conn.Close()
 	}()
 
@@ -79,8 +91,6 @@ func genkeyWebsocket(conn *websocket.Conn) {
 			// Disconnected
 			break
 		}
-
-		connID := generateConnID(conn)
 
 		// Check if any cached data exists for this user
 		var userData *genkey.UserData
@@ -110,6 +120,6 @@ func genkeyWebsocket(conn *websocket.Conn) {
 	}
 }
 
-func generateConnID(conn *websocket.Conn) uint32 {
+func generateConnID() uint32 {
 	return uuid.New().ID()
 }
