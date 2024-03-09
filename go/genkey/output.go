@@ -49,7 +49,7 @@ func (self *GenkeyOutput) PrintLayout(keys [][]string) {
 	}
 }
 
-func (self *GenkeyOutput) PrintAnalysis(l Layout) {
+func (self *GenkeyOutput) PrintAnalysis(l *Layout) {
 	genkeyLayout := NewGenkeyLayout(self.conn, self.userData)
 
 	self.SendMessage(color.White().Bold().Sprint(l.Name + "\n"))
@@ -64,7 +64,7 @@ func (self *GenkeyOutput) PrintAnalysis(l Layout) {
 		self.SendMessage(fmt.Sprintf("Missing characters: %s\n", missing))
 	}
 
-	ftri := genkeyLayout.FastTrigrams(&l, 0)
+	ftri := genkeyLayout.FastTrigrams(l, 0)
 	ftotal := float64(ftri.Total)
 	leftrolls := 100*float64(ftri.LeftInwardRolls)/ftotal + 100*float64(ftri.LeftOutwardRolls)/ftotal
 	rightrolls := 100*float64(ftri.RightInwardRolls)/ftotal + 100*float64(ftri.RightOutwardRolls)/ftotal
@@ -81,11 +81,11 @@ func (self *GenkeyOutput) PrintAnalysis(l Layout) {
 	var weighted []float64
 	var unweighted []float64
 	if self.userData.DynamicFlag {
-		weighted = genkeyLayout.DynamicFingerSpeed(&l, true)
-		unweighted = genkeyLayout.DynamicFingerSpeed(&l, false)
+		weighted = genkeyLayout.DynamicFingerSpeed(l, true)
+		unweighted = genkeyLayout.DynamicFingerSpeed(l, false)
 	} else {
-		weighted = genkeyLayout.FingerSpeed(&l, true)
-		unweighted = genkeyLayout.FingerSpeed(&l, false)
+		weighted = genkeyLayout.FingerSpeed(l, true)
+		unweighted = genkeyLayout.FingerSpeed(l, false)
 	}
 	var highestUnweightedFinger string
 	var highestUnweighted float64
@@ -163,7 +163,7 @@ func (self *GenkeyOutput) PrintFreqList(list []FreqPair, length int, percent boo
 	self.SendMessage("\n")
 }
 
-func (self *GenkeyOutput) Heatmap(layout Layout) {
+func (self *GenkeyOutput) Heatmap(layout *Layout) {
 	l := layout.Keys
 	dc := gg.NewContext(500, 160)
 

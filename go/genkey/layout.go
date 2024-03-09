@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	websocket "github.com/gorilla/websocket"
 )
@@ -46,10 +47,59 @@ type Pos struct {
 type Pair [2]Pos
 type Finger int
 
+type KeymapMutexMap struct {
+	mu   sync.RWMutex
+	mmap map[string]Pos
+}
+
+func (km *KeymapMutexMap) Get(key string) Pos {
+	km.mu.Lock()
+	defer km.mu.Unlock()
+	return km.mmap[key]
+}
+
+func (km *KeymapMutexMap) TryGet(key string) (Pos, bool) {
+	km.mu.Lock()
+	defer km.mu.Unlock()
+	value, ok := km.mmap[key]
+	return value, ok
+}
+
+func (km *KeymapMutexMap) Store(key string, pos Pos) {
+	km.mu.Lock()
+	defer km.mu.Unlock()
+	km.mmap[key] = pos
+}
+
+func (km *KeymapMutexMap) Pop(key string) {
+	km.mu.Lock()
+	defer km.mu.Unlock()
+	delete(km.mmap, key)
+}
+
+func (km *KeymapMutexMap) Update(newMap map[string]Pos) {
+	km.mu.Lock()
+	defer km.mu.Unlock()
+	km.mmap = newMap
+}
+
+func (km *KeymapMutexMap) CopyMap() map[string]Pos {
+	km.mu.Lock()
+	defer km.mu.Unlock()
+
+	newMap := make(map[string]Pos)
+
+	for k, v := range km.mmap {
+		newMap[k] = v
+	}
+
+	return newMap
+}
+
 type Layout struct {
 	Name         string
 	Keys         [][]string
-	Keymap       map[string]Pos
+	Keymap       KeymapMutexMap
 	Fingermatrix map[Pos]Finger
 	Fingermap    map[Finger][]Pos
 	Total        float64
@@ -59,8 +109,8 @@ func (self *GenkeyLayout) MinimizeLayout(init *Layout, pins [][]string, count in
 	genkeyGenerate := NewGenkeyGenerate(self.conn, self.userData)
 	genkeyInteractive := NewGenkeyInteractive(self.conn, self.userData)
 
-	bestScore := genkeyGenerate.Score(*init)
-	bestLayout := genkeyInteractive.CopyLayout(*init)
+	bestScore := genkeyGenerate.Score(init)
+	bestLayout := genkeyInteractive.CopyLayout(init)
 	var tot int
 	var r1len int
 	var r2len int
@@ -130,11 +180,11 @@ func (self *GenkeyLayout) MinimizeLayout(init *Layout, pins [][]string, count in
 					continue
 				}
 
-				genkeyGenerate.Swap(&swapped, swapped.Keymap[ki], swapped.Keymap[kj])
+				genkeyGenerate.Swap(swapped, swapped.Keymap.Get(ki), swapped.Keymap.Get(kj))
 
 				var swappedScore float64
 				if count != 0 {
-					self.MinimizeLayout(&swapped, pins, count-1, false, is33, noCross)
+					self.MinimizeLayout(swapped, pins, count-1, false, is33, noCross)
 					recBestScore := genkeyGenerate.Score(swapped)
 					if recBestScore < bestSoFarScore {
 						bestSoFarScore = recBestScore
@@ -158,10 +208,10 @@ func (self *GenkeyLayout) MinimizeLayout(init *Layout, pins [][]string, count in
 			break
 		}
 	}
-	*init = bestLayout
+	init = bestLayout
 }
 
-func (self *GenkeyLayout) LoadLayout(f string) Layout {
+func (self *GenkeyLayout) LoadLayout(f string) *Layout {
 	var l Layout
 	b, err := GenkeyReadFile(f)
 	if err != nil {
@@ -218,9 +268,9 @@ func (self *GenkeyLayout) LoadLayout(f string) Layout {
 		}
 	}
 
-	l.Keymap = self.GenKeymap(l.Keys)
+	l.Keymap.Update(self.GenKeymap(l.Keys))
 
-	return l
+	return &l
 }
 
 func (self *GenkeyLayout) LoadLayoutDir() {
@@ -339,7 +389,7 @@ func (self *GenkeyLayout) DynamicFingerSpeed(l *Layout, weighted bool) []float64
 	return speeds
 }
 
-func (self *GenkeyLayout) SFBs(l Layout, skipgrams bool) float64 {
+func (self *GenkeyLayout) SFBs(l *Layout, skipgrams bool) float64 {
 	var count float64
 	for _, posits := range l.Fingermap {
 		for i := 0; i < len(posits); i++ {
@@ -362,7 +412,7 @@ func (self *GenkeyLayout) SFBs(l Layout, skipgrams bool) float64 {
 	return count
 }
 
-func (self *GenkeyLayout) DynamicSFBs(l Layout) float64 {
+func (self *GenkeyLayout) DynamicSFBs(l *Layout) float64 {
 	var count float64
 	for _, posits := range l.Fingermap {
 		for i := 0; i < len(posits); i++ {
@@ -398,7 +448,7 @@ func (self *GenkeyLayout) SortFreqList(pairs []FreqPair) {
 	})
 }
 
-func (self *GenkeyLayout) ListSFBs(l Layout, skipgrams bool) []FreqPair {
+func (self *GenkeyLayout) ListSFBs(l *Layout, skipgrams bool) []FreqPair {
 	var list []FreqPair
 	for _, posits := range l.Fingermap {
 		for i := 0; i < len(posits); i++ {
@@ -429,14 +479,14 @@ func (self *GenkeyLayout) ListSFBs(l Layout, skipgrams bool) []FreqPair {
 	return list
 }
 
-func (self *GenkeyLayout) ListDynamic(l Layout) ([]FreqPair, []FreqPair) {
+func (self *GenkeyLayout) ListDynamic(l *Layout) ([]FreqPair, []FreqPair) {
 	sfbs := self.ListSFBs(l, false)
 	self.SortFreqList(sfbs)
 	var escaped []FreqPair
 	var real []FreqPair
 	highestfound := make(map[Pos]bool)
 	for _, bg := range sfbs {
-		prefix := l.Keymap[string(bg.Ngram[0])]
+		prefix := l.Keymap.Get(string(bg.Ngram[0]))
 		if highestfound[prefix] {
 			real = append(real, bg)
 		} else {
@@ -448,7 +498,7 @@ func (self *GenkeyLayout) ListDynamic(l Layout) ([]FreqPair, []FreqPair) {
 	return escaped, real
 }
 
-func (self *GenkeyLayout) ListWorstBigrams(l Layout) []FreqPair {
+func (self *GenkeyLayout) ListWorstBigrams(l *Layout) []FreqPair {
 	var bigrams []FreqPair
 	weight := self.userData.Config.Weights
 	sfbweight := weight.FSpeed.SFB
@@ -498,9 +548,9 @@ func (self *GenkeyLayout) FastTrigrams(l *Layout, precision int) TrigramValues {
 	}
 
 	for _, tg := range self.userData.Data.TopTrigrams[:min(len(self.userData.Data.TopTrigrams), precision)] {
-		km1, ok1 := l.Keymap[string(tg.Ngram[0])]
-		km2, ok2 := l.Keymap[string(tg.Ngram[1])]
-		km3, ok3 := l.Keymap[string(tg.Ngram[2])]
+		km1, ok1 := l.Keymap.TryGet(string(tg.Ngram[0]))
+		km2, ok2 := l.Keymap.TryGet(string(tg.Ngram[1]))
+		km3, ok3 := l.Keymap.TryGet(string(tg.Ngram[2]))
 
 		if !ok1 || !ok2 || !ok3 {
 			continue
@@ -564,7 +614,7 @@ func (self *GenkeyLayout) FastTrigrams(l *Layout, precision int) TrigramValues {
 	return tgs
 }
 
-func (self *GenkeyLayout) IndexUsage(l Layout) (float64, float64) {
+func (self *GenkeyLayout) IndexUsage(l *Layout) (float64, float64) {
 	left := 0
 	right := 0
 
@@ -580,7 +630,7 @@ func (self *GenkeyLayout) IndexUsage(l Layout) (float64, float64) {
 	return (100 * float64(left) / l.Total), (100 * float64(right) / l.Total)
 }
 
-func (self *GenkeyLayout) LSBs(l Layout) int {
+func (self *GenkeyLayout) LSBs(l *Layout) int {
 	var count int
 
 	// LI LM
@@ -657,7 +707,7 @@ func (self *GenkeyLayout) LSBs(l Layout) int {
 	return count
 }
 
-func (self *GenkeyLayout) ListLSBs(l Layout) []FreqPair {
+func (self *GenkeyLayout) ListLSBs(l *Layout) []FreqPair {
 	var list []FreqPair
 	for _, p1 := range l.Fingermap[3] {
 		for _, p2 := range l.Fingermap[2] {
@@ -728,7 +778,7 @@ func (self *GenkeyLayout) Similarity(a, b []string) int {
 	return score
 }
 
-func (self *GenkeyLayout) DuplicatesAndMissing(l Layout) ([]string, []string) {
+func (self *GenkeyLayout) DuplicatesAndMissing(l *Layout) ([]string, []string) {
 	counts := make(map[string]int)
 	// collect counts of each key
 	for _, row := range l.Keys {

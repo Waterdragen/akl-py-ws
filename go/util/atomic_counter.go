@@ -20,6 +20,10 @@ func (ac *AtomicCounter) GetCount() int64 {
 	return atomic.LoadInt64(&ac.counter)
 }
 
+func (ac *AtomicCounter) SetCount(i int) {
+	atomic.StoreInt64(&ac.counter, int64(i))
+}
+
 func (ac *AtomicCounter) Reset() {
 	atomic.StoreInt64(&ac.counter, 0)
 }
