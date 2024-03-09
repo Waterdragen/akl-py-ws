@@ -16,7 +16,6 @@ package genkey
 
 import (
 	"fmt"
-	"log"
 	"math"
 	"math/rand"
 	"sort"
@@ -42,7 +41,7 @@ func (self *GenkeyGenerate) SendMessage(s string) {
 
 // Max Rolls: 30%
 
-func (self *GenkeyGenerate) Score(l Layout) float64 {
+func (self *GenkeyGenerate) Score(l *Layout) float64 {
 	genkeyLayout := NewGenkeyLayout(self.conn, self.userData)
 
 	var score float64
@@ -50,9 +49,9 @@ func (self *GenkeyGenerate) Score(l Layout) float64 {
 	if s.FSpeed != 0 {
 		var speeds []float64
 		if !self.userData.DynamicFlag {
-			speeds = genkeyLayout.FingerSpeed(&l, true)
+			speeds = genkeyLayout.FingerSpeed(l, true)
 		} else {
-			speeds = genkeyLayout.DynamicFingerSpeed(&l, true)
+			speeds = genkeyLayout.DynamicFingerSpeed(l, true)
 		}
 		total := 0.0
 		for _, s := range speeds {
@@ -64,7 +63,7 @@ func (self *GenkeyGenerate) Score(l Layout) float64 {
 		score += s.LSB * 100 * float64(genkeyLayout.LSBs(l)) / l.Total
 	}
 	if s.Trigrams.Enabled {
-		tri := genkeyLayout.FastTrigrams(&l, s.Trigrams.Precision)
+		tri := genkeyLayout.FastTrigrams(l, s.Trigrams.Precision)
 		score += s.Trigrams.LeftInwardRoll * (100 - (100 * float64(tri.LeftInwardRolls) / float64(tri.Total)))
 		score += s.Trigrams.RightInwardRoll * (100 - (100 * float64(tri.RightInwardRolls) / float64(tri.Total)))
 		score += s.Trigrams.LeftOutwardRoll * (100 - (100 * float64(tri.LeftOutwardRolls) / float64(tri.Total)))
@@ -84,7 +83,7 @@ func (self *GenkeyGenerate) Score(l Layout) float64 {
 	return score
 }
 
-func (self *GenkeyGenerate) randomLayout() Layout {
+func (self *GenkeyGenerate) randomLayout() *Layout {
 	chars := self.userData.Config.Generation.GeneratedLayoutChars
 	var k [][]string
 	k = make([][]string, 3)
@@ -100,15 +99,15 @@ func (self *GenkeyGenerate) randomLayout() Layout {
 	}
 
 	l.Keys = k
-	l.Keymap = NewGenkeyLayout(self.conn, self.userData).GenKeymap(k)
+	l.Keymap.Update(NewGenkeyLayout(self.conn, self.userData).GenKeymap(k))
 	l.Fingermap = self.userData.GeneratedFingermap
 	l.Fingermatrix = self.userData.GeneratedFingermatrix
 
-	return l
+	return &l
 }
 
 type layoutScore struct {
-	l     Layout
+	l     *Layout
 	score float64
 }
 
@@ -133,11 +132,12 @@ func (self *GenkeyGenerate) sortLayouts(layouts []layoutScore) {
 	})
 }
 
-func (self *GenkeyGenerate) Populate(n int) Layout {
+func (self *GenkeyGenerate) Populate(n int) *Layout {
 	layouts := []layoutScore{}
 	for i := 0; i < n; i++ {
 		if !self.userData.ImproveFlag {
-			layouts = append(layouts, layoutScore{self.randomLayout(), 0})
+			layout := self.randomLayout()
+			layouts = append(layouts, layoutScore{layout, 0})
 		} else {
 			layouts = append(layouts, layoutScore{NewGenkeyInteractive(self.conn, self.userData).CopyLayout(self.userData.ImproveLayout), 0})
 		}
@@ -145,24 +145,33 @@ func (self *GenkeyGenerate) Populate(n int) Layout {
 	}
 	self.SendMessage(fmt.Sprintf("%d random created...\r\n", n))
 
-	for i := range layouts {
-		layouts[i].score = 0
-		go self.greedyImprove(&layouts[i].l)
-	}
-
 	analyzed := 0
 	goroCounter := &self.userData.GoroutineCounter
-	goroCounter.Reset()
 
-	log.Printf("goroCounter: %v\n", goroCounter)
+	goroCounter.SetCount(len(layouts))
 
-	for goroCounter.GetCount() > 1 {
-		self.SendMessage(fmt.Sprintf("%d greedy improving at %d analyzed/s       \r", goroCounter.GetCount()-1, self.userData.Analyzed-analyzed))
-		analyzed = self.userData.Analyzed
-		time.Sleep(time.Second)
+	for i := range layouts {
+		go func(_i int, _layouts []layoutScore) {
+			_layouts[_i].score = 0
+			self.greedyImprove(_layouts[_i].l)
+		}(i, layouts)
 	}
 
-	goroCounter.Reset()
+	done := make(chan bool)
+
+	go func() {
+		defer func() {
+			done <- true
+		}()
+
+		for goroCounter.GetCount() > 1 {
+			self.SendMessage(fmt.Sprintf("%d greedy improving at %d analyzed/s       \n", goroCounter.GetCount()-1, self.userData.Analyzed-analyzed))
+			analyzed = self.userData.Analyzed
+			time.Sleep(time.Second)
+		}
+	}()
+
+	<-done
 
 	self.SendMessage("\n")
 
@@ -179,17 +188,27 @@ func (self *GenkeyGenerate) Populate(n int) Layout {
 
 	layouts = layouts[0:self.userData.Config.Generation.Selection]
 
+	goroCounter.SetCount(len(layouts))
+
 	for i := range layouts {
-		layouts[i].score = 0
-		go self.fullImprove(&layouts[i].l)
+		go func(_i int, _layouts []layoutScore) {
+			_layouts[_i].score = 0
+			self.fullImprove(_layouts[_i].l)
+		}(i, layouts)
 	}
 
-	for goroCounter.GetCount() > 1 {
-		self.SendMessage(fmt.Sprintf("%d fully improving at %d analyzed/s      \r", goroCounter.GetCount()-1, self.userData.Analyzed-analyzed))
-		analyzed = self.userData.Analyzed
-		time.Sleep(time.Second)
-	}
-	goroCounter.Reset()
+	go func() {
+		defer func() {
+			done <- true
+		}()
+		for goroCounter.GetCount() > 1 {
+			self.SendMessage(fmt.Sprintf("%d fully improving at %d analyzed/s      \n", goroCounter.GetCount()-1, self.userData.Analyzed-analyzed))
+			analyzed = self.userData.Analyzed
+			time.Sleep(time.Second)
+		}
+	}()
+
+	<-done
 
 	self.sortLayouts(layouts)
 
@@ -201,7 +220,7 @@ func (self *GenkeyGenerate) Populate(n int) Layout {
 			continue
 		}
 		if self.userData.Data.Letters[best.l.Keys[0][col]] < self.userData.Data.Letters[best.l.Keys[2][col]] {
-			self.Swap(&best.l, Pos{col, 0}, Pos{col, 2})
+			self.Swap(best.l, Pos{col, 0}, Pos{col, 2})
 		}
 	}
 
@@ -231,18 +250,17 @@ func (self *GenkeyGenerate) RandPos() Pos {
 }
 
 func (self *GenkeyGenerate) greedyImprove(layout *Layout) {
-	self.userData.GoroutineCounter.Increment()
 	defer self.userData.GoroutineCounter.Decrement()
 
 	stuck := 0
 	for {
-		first := self.Score(*layout)
+		first := self.Score(layout)
 
 		a := self.RandPos()
 		b := self.RandPos()
 		self.Swap(layout, a, b)
 
-		second := self.Score(*layout)
+		second := self.Score(layout)
 
 		if second < first {
 			// accept
@@ -260,7 +278,6 @@ func (self *GenkeyGenerate) greedyImprove(layout *Layout) {
 }
 
 func (self *GenkeyGenerate) fullImprove(layout *Layout) {
-	self.userData.GoroutineCounter.Increment()
 	defer self.userData.GoroutineCounter.Decrement()
 
 	i := 0
@@ -272,7 +289,7 @@ func (self *GenkeyGenerate) fullImprove(layout *Layout) {
 	Swaps := make([]Pair, 7)
 	for {
 		i += 1
-		first := self.Score(*layout)
+		first := self.Score(layout)
 
 		for j := tier - 1; j >= 0; j-- {
 			a := self.RandPos()
@@ -281,7 +298,7 @@ func (self *GenkeyGenerate) fullImprove(layout *Layout) {
 			Swaps[j] = Pair{a, b}
 		}
 
-		second := self.Score(*layout)
+		second := self.Score(layout)
 
 		if second < first {
 			i = 0
@@ -320,11 +337,9 @@ func (self *GenkeyGenerate) fullImprove(layout *Layout) {
 
 func (self *GenkeyGenerate) Swap(l *Layout, a, b Pos) {
 	k := l.Keys
-	m := l.Keymap
 	k[a.Row][a.Col], k[b.Row][b.Col] = k[b.Row][b.Col], k[a.Row][a.Col]
-	m[k[a.Row][a.Col]] = a
-	m[k[b.Row][b.Col]] = b
+	l.Keymap.Store(k[a.Row][a.Col], a)
+	l.Keymap.Store(k[b.Row][b.Col], b)
 
 	l.Keys = k
-	l.Keymap = m
 }

@@ -24,7 +24,7 @@ type StringPrinter struct {
 }
 
 func NewStringPrinter() *StringPrinter {
-	sp := StringPrinter{Height: 60, Width: 120}
+	sp := StringPrinter{Height: 20, Width: 120}
 	sp.newConsole()
 	return &sp
 }

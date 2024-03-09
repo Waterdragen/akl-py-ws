@@ -2,7 +2,7 @@ Corpus = "shai-iweb"
 
 [Output]
 # Enables heatmap output after layout generation.
-Generation.Heatmap = true
+Generation.Heatmap = false
 
 # Char to fill the space in the rank display.
 Rank.Spacer = ' '

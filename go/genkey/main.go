@@ -143,7 +143,7 @@ func (self *GenkeyMain) SendMessage(s string) {
 func (self *GenkeyMain) getLayout(s string) *Layout {
 	s = strings.ToLower(s)
 	if l, ok := self.userData.Layouts[s]; ok {
-		return &l
+		return l
 	}
 	self.SendMessage(fmt.Sprintf("layout [%s] was not found\n", s))
 	return nil
@@ -237,7 +237,7 @@ func (self *GenkeyMain) runCommand(args []string) {
 			self.SendMessage(fmt.Sprintf("%s%s%.2f\n", l.name, spaces, l.score))
 		}
 	} else if cmd == "analyze" {
-		NewGenkeyOutput(self.conn, self.userData).PrintAnalysis(*layout)
+		NewGenkeyOutput(self.conn, self.userData).PrintAnalysis(layout)
 	} else if cmd == "generate" {
 		genkeyGenerate := NewGenkeyGenerate(self.conn, self.userData)
 		best := genkeyGenerate.Populate(self.userData.Config.Generation.InitialPopulation)
@@ -265,7 +265,7 @@ func (self *GenkeyMain) runCommand(args []string) {
 			)
 		}
 	} else if cmd == "interactive" {
-		NewGenkeyInteractive(self.conn, self.userData).InteractiveInitial(*layout)
+		NewGenkeyInteractive(self.conn, self.userData).InteractiveInitial(layout)
 
 	} else if cmd == "heatmap" {
 		self.SendMessage("Unsupported command in demo mode")
@@ -273,7 +273,7 @@ func (self *GenkeyMain) runCommand(args []string) {
 	} else if cmd == "improve" {
 		genkeyGenerate := NewGenkeyGenerate(self.conn, self.userData)
 		self.userData.ImproveFlag = true
-		self.userData.ImproveLayout = *layout
+		self.userData.ImproveLayout = layout
 		best := genkeyGenerate.Populate(1000)
 		optimal := genkeyGenerate.Score(best)
 
@@ -282,22 +282,21 @@ func (self *GenkeyMain) runCommand(args []string) {
 		)
 	} else if cmd == "sfbs" || cmd == "dsfbs" || cmd == "lsbs" || cmd == "bigrams" {
 		genkeyLayout := NewGenkeyLayout(self.conn, self.userData)
-		l := *layout
 		var total float64
 		var list []FreqPair
 		if cmd == "sfbs" {
-			total = 100 * float64(genkeyLayout.SFBs(l, false)) / l.Total
-			list = genkeyLayout.ListSFBs(l, false)
+			total = 100 * float64(genkeyLayout.SFBs(layout, false)) / layout.Total
+			list = genkeyLayout.ListSFBs(layout, false)
 		} else if cmd == "dsfbs" {
-			total = 100 * float64(genkeyLayout.SFBs(l, true)) / l.Total
-			list = genkeyLayout.ListSFBs(l, true)
+			total = 100 * float64(genkeyLayout.SFBs(layout, true)) / layout.Total
+			list = genkeyLayout.ListSFBs(layout, true)
 
 		} else if cmd == "lsbs" {
-			total = 100 * float64(genkeyLayout.LSBs(l)) / l.Total
-			list = genkeyLayout.ListLSBs(l)
+			total = 100 * float64(genkeyLayout.LSBs(layout)) / layout.Total
+			list = genkeyLayout.ListLSBs(layout)
 		} else if cmd == "bigrams" {
 			total = 0.0
-			list = genkeyLayout.ListWorstBigrams(l)
+			list = genkeyLayout.ListWorstBigrams(layout)
 		}
 		genkeyLayout.SortFreqList(list)
 		if count == 0 {
@@ -375,7 +374,7 @@ func (self *GenkeyMain) Run(input string) {
 
 	self.userData.Data = NewGenkeyText(self.conn, self.userData).LoadData(filepath.Join(self.userData.Config.Paths.Corpora, self.userData.Config.Corpus) + ".json")
 
-	self.userData.Layouts = make(map[string]Layout)
+	self.userData.Layouts = make(map[string]*Layout)
 	NewGenkeyLayout(self.conn, self.userData).LoadLayoutDir()
 
 	for _, l := range self.userData.Layouts {

@@ -96,7 +96,7 @@ type UserInteractive struct {
 	Pins          [][]string
 	Threshold     float64
 	InInteractive bool
-	Layout        Layout
+	Layout        *Layout
 	LayoutWidth   int
 }
 
@@ -110,9 +110,9 @@ type UserData struct {
 	SlideFlag      bool
 	DynamicFlag    bool
 	ImproveFlag    bool
-	ImproveLayout  Layout
+	ImproveLayout  *Layout
 
-	Layouts               map[string]Layout
+	Layouts               map[string]*Layout
 	GeneratedFingermap    map[Finger][]Pos
 	GeneratedFingermatrix map[Pos]Finger
 	LongestLayoutName     int

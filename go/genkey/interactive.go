@@ -37,7 +37,7 @@ func (self *GenkeyInteractive) FlushSp() {
 	self.SendMessage(msg)
 }
 
-func (self *GenkeyInteractive) CopyLayout(src Layout) Layout {
+func (self *GenkeyInteractive) CopyLayout(src *Layout) *Layout {
 	var l Layout
 	n := len(src.Keys)
 	l.Keys = make([][]string, n)
@@ -48,10 +48,9 @@ func (self *GenkeyInteractive) CopyLayout(src Layout) Layout {
 	l.Name = src.Name
 	l.Total = src.Total
 
-	l.Keymap = make(map[string]Pos)
-	for k, v := range src.Keymap {
-		l.Keymap[k] = v
-	}
+	srcKeymap := src.Keymap.CopyMap()
+	l.Keymap.Update(srcKeymap)
+
 	l.Fingermap = make(map[Finger][]Pos)
 	for k, v := range src.Fingermap {
 		l.Fingermap[k] = v
@@ -60,7 +59,7 @@ func (self *GenkeyInteractive) CopyLayout(src Layout) Layout {
 	for k, v := range src.Fingermatrix {
 		l.Fingermatrix[k] = v
 	}
-	return l
+	return &l
 }
 
 func (self *GenkeyInteractive) printlayout(l *Layout, px, py int) {
@@ -86,8 +85,8 @@ func (self *GenkeyInteractive) printsfbs(l *Layout) {
 	interactive := &self.userData.Interactive
 	genkeyLayout := NewGenkeyLayout(self.conn, self.userData)
 
-	sfbs := genkeyLayout.ListSFBs(*l, false)
-	rate := genkeyLayout.SFBs(*l, false)
+	sfbs := genkeyLayout.ListSFBs(l, false)
+	rate := genkeyLayout.SFBs(l, false)
 	genkeyLayout.SortFreqList(sfbs)
 	self.sp.MoveCursor(4+(interactive.LayoutWidth*2), 1)
 	self.sp.Print(fmt.Sprintf("SFBs %.2f%%", 100*rate/l.Total))
@@ -101,7 +100,7 @@ func (self *GenkeyInteractive) printworst(l *Layout) {
 	genkeyLayout := NewGenkeyLayout(self.conn, self.userData)
 	interactive := &self.userData.Interactive
 
-	bgs := genkeyLayout.ListWorstBigrams(*l)
+	bgs := genkeyLayout.ListWorstBigrams(l)
 	genkeyLayout.SortFreqList(bgs)
 	self.sp.MoveCursor(3+(interactive.LayoutWidth*2)+13, 1)
 	self.sp.Print("Worst BGs")
@@ -161,7 +160,7 @@ type psbl struct {
 	potential float64
 }
 
-func (self *GenkeyInteractive) worsen(l Layout, is33 bool) {
+func (self *GenkeyInteractive) worsen(l *Layout, is33 bool) {
 	n := 1000
 	i := 0
 	var klen int
@@ -223,14 +222,14 @@ func (self *GenkeyInteractive) worsen(l Layout, is33 bool) {
 		if px == kx || px == ky || py == kx || py == ky {
 			continue
 		}
-		p1 := l.Keymap[kx]
-		p2 := l.Keymap[ky]
-		NewGenkeyGenerate(self.conn, self.userData).Swap(&l, p1, p2)
+		p1 := l.Keymap.Get(kx)
+		p2 := l.Keymap.Get(ky)
+		NewGenkeyGenerate(self.conn, self.userData).Swap(l, p1, p2)
 		i = i + 1
 	}
 }
 
-func (self *GenkeyInteractive) SuggestSwaps(l Layout, depth int, maxdepth int, p *psbl, wg *sync.WaitGroup) psbl {
+func (self *GenkeyInteractive) SuggestSwaps(l *Layout, depth int, maxdepth int, p *psbl, wg *sync.WaitGroup) psbl {
 	genkeyGenerate := NewGenkeyGenerate(self.conn, self.userData)
 	s1 := genkeyGenerate.Score(l)
 
@@ -245,7 +244,7 @@ func (self *GenkeyInteractive) SuggestSwaps(l Layout, depth int, maxdepth int, p
 					p1 := Pos{c1, r1}
 					p2 := Pos{c2, r2}
 
-					genkeyGenerate.Swap(&l, p1, p2)
+					genkeyGenerate.Swap(l, p1, p2)
 					s2 := genkeyGenerate.Score(l)
 					diff := s1 - s2
 					if depth < maxdepth && diff > self.userData.Interactive.Threshold {
@@ -264,7 +263,7 @@ func (self *GenkeyInteractive) SuggestSwaps(l Layout, depth int, maxdepth int, p
 							*&p.potential = s2
 						}
 					}
-					genkeyGenerate.Swap(&l, p1, p2)
+					genkeyGenerate.Swap(l, p1, p2)
 				}
 			}
 		}
@@ -329,9 +328,9 @@ func (self *GenkeyInteractive) InteractiveSubsequent(input string) {
 			self.message("usage: s key1 key2", "example: s a b")
 			break
 		}
-		p1 := l.Keymap[args[1]]
-		p2 := l.Keymap[args[2]]
-		NewGenkeyGenerate(self.conn, self.userData).Swap(&l, p1, p2)
+		p1 := l.Keymap.Get(args[1])
+		p2 := l.Keymap.Get(args[2])
+		NewGenkeyGenerate(self.conn, self.userData).Swap(l, p1, p2)
 		interactive.Aswaps[0] = p1
 		interactive.Bswaps[0] = p2
 		interactive.Swapnum = 1
@@ -346,18 +345,18 @@ func (self *GenkeyInteractive) InteractiveSubsequent(input string) {
 		if n, err := strconv.Atoi(args[1]); err == nil {
 			c1 = n
 		} else {
-			c1 = l.Keymap[args[1]].Col
+			c1 = l.Keymap.Get(args[1]).Col
 		}
 
 		if n, err := strconv.Atoi(args[2]); err == nil {
 			c2 = n
 		} else {
-			c2 = l.Keymap[args[2]].Col
+			c2 = l.Keymap.Get(args[2]).Col
 		}
 		for r := 0; r < 3; r++ {
 			p1 := Pos{c1, r}
 			p2 := Pos{c2, r}
-			NewGenkeyGenerate(self.conn, self.userData).Swap(&l, p1, p2)
+			NewGenkeyGenerate(self.conn, self.userData).Swap(l, p1, p2)
 			interactive.Aswaps[r] = p1
 			interactive.Bswaps[r] = p2
 		}
@@ -365,7 +364,7 @@ func (self *GenkeyInteractive) InteractiveSubsequent(input string) {
 		self.message(fmt.Sprintf("swapped c%d with c%d", c1, c2))
 	case "r":
 		for i := 0; i < interactive.Swapnum; i++ {
-			NewGenkeyGenerate(self.conn, self.userData).Swap(&l, interactive.Aswaps[i], interactive.Bswaps[i])
+			NewGenkeyGenerate(self.conn, self.userData).Swap(l, interactive.Aswaps[i], interactive.Bswaps[i])
 		}
 		self.message("reverted last swap")
 	case "g":
@@ -389,9 +388,9 @@ func (self *GenkeyInteractive) InteractiveSubsequent(input string) {
 	case "w":
 		self.worsen(l, is33)
 	case "m2":
-		NewGenkeyLayout(self.conn, self.userData).MinimizeLayout(&l, interactive.Pins, 1, true, is33, noCross)
+		NewGenkeyLayout(self.conn, self.userData).MinimizeLayout(l, interactive.Pins, 1, true, is33, noCross)
 	case "m":
-		NewGenkeyLayout(self.conn, self.userData).MinimizeLayout(&l, interactive.Pins, 0, true, is33, noCross)
+		NewGenkeyLayout(self.conn, self.userData).MinimizeLayout(l, interactive.Pins, 0, true, is33, noCross)
 	case "q":
 		interactive.InInteractive = false
 	case "save":
@@ -402,7 +401,7 @@ func (self *GenkeyInteractive) InteractiveSubsequent(input string) {
 	self.sp.Print(":")
 }
 
-func (self *GenkeyInteractive) InteractiveInitial(l Layout) {
+func (self *GenkeyInteractive) InteractiveInitial(l *Layout) {
 	defer self.FlushSp()
 
 	interactive := &self.userData.Interactive
@@ -436,12 +435,12 @@ func (self *GenkeyInteractive) printUpdatedLayout(start time.Time) {
 
 	self.sp.MoveCursor(0, 0)
 	self.sp.Print(l.Name)
-	self.printlayout(&l, 1, 2)
+	self.printlayout(l, 1, 2)
 	self.sp.MoveCursor(1, 5)
 	self.sp.Print(fmt.Sprintf("Score: %.2f", NewGenkeyGenerate(self.conn, self.userData).Score(l)))
-	self.printsfbs(&l)
-	self.printworst(&l)
-	self.printtrigrams(&l)
+	self.printsfbs(l)
+	self.printworst(l)
+	self.printtrigrams(l)
 	end := time.Now()
 	elapsed := end.Sub(start)
 	millis := float64(elapsed) / float64(time.Millisecond)
