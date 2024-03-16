@@ -501,6 +501,7 @@ impl Repl {
             }
             Some("quit") | Some("exit") | Some("q") => {
                 self.sendln("Exiting analyzer...");
+                self.send("[QUIT]");
                 return Ok(true)
             }
             Some("help") | Some("--help") | Some("h") | Some("-h") => {

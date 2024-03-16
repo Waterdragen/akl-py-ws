@@ -35,7 +35,6 @@ async fn oxeylyzer_ws_handler(req: HttpRequest, stream: web::Payload) -> Result<
     let session = Arc::new(Mutex::new(session));
     let uuid = Uuid::new_v4();
 
-    println!("Websocket connection established");
     actix_rt::spawn(async move {
         oxeylyzer_store_user_data(uuid, None);
 

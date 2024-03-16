@@ -1,11 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
+	"runtime/debug"
 	"strings"
 
-	_ "github.com/virtuald/go-paniclog"
 	genkey "github.com/waterdragen/akl-ws/genkey"
 
 	gin "github.com/gin-gonic/gin"
@@ -19,7 +20,9 @@ import (
 var connUsersData *ConnUsers = NewConnUsers()
 
 func main() {
+	gin.SetMode(gin.ReleaseMode)
 	const PORT string = ":9002"
+	log.Println("Running server on http://localhost" + PORT)
 
 	router := gin.Default()
 	router.LoadHTMLGlob("../templates/*")
@@ -69,13 +72,6 @@ func main() {
 
 func genkeyWebsocket(conn *websocket.Conn) {
 	connID := generateConnID()
-	//file, err := os.Create(fmt.Sprintf("panic-%v.log", connID))
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-	//defer file.Close()
-
-	// paniclog.RedirectStderr(file)
 
 	defer func() {
 		connUsersData.Pop(connID)
@@ -83,39 +79,57 @@ func genkeyWebsocket(conn *websocket.Conn) {
 	}()
 
 	for {
-		// Read message from the websock et client
-		_, message, err := conn.ReadMessage()
-		if err != nil {
-			// Disconnected
-			break
-		}
-
-		// Check if any cached data exists for this user
-		var userData *genkey.UserData
-
-		userDataObj, hasUserData := connUsersData.Get(connID)
-		if !hasUserData {
-			userData = nil
-		} else {
-			userData = userDataObj
-		}
-
-		// Run genkey
-		genkeyMain := genkey.NewGenkeyMain(conn, userData)
-		userData = genkeyMain.GetUserData()
-
-		if userData.Interactive.InInteractive {
-			genkeyInteractive := genkey.NewGenkeyInteractive(conn, userData)
-			genkeyInteractive.InteractiveSubsequent(string(message))
-		} else {
-			genkeyMain.Run(string(message))
-		}
-
-		genkeyMain.SendMessage("[DONE]")
-
-		// Store UserData to sync map
-		connUsersData.Add(connID, genkeyMain.GetUserData())
+		genkeyProcess(conn, connID)
 	}
+}
+
+func genkeyProcess(conn *websocket.Conn, connID uint32) {
+	defer func() {
+		if r := recover(); r != nil {
+			stackTrace := string(debug.Stack())
+			stackTrace = strings.Join(strings.Split(stackTrace, "\n")[0:5], "\n")
+			errMsg := fmt.Sprintf("%s\n%s", r, stackTrace)
+			conn.WriteMessage(websocket.TextMessage, []byte(errMsg))
+			log.Println(errMsg)
+		}
+	}()
+
+	// Read message from the websock et client
+	_, message, err := conn.ReadMessage()
+	if err != nil {
+		// Disconnected
+		return
+	}
+
+	// Check if any cached data exists for this user
+	var userData *genkey.UserData
+
+	userDataObj, hasUserData := connUsersData.Get(connID)
+	if !hasUserData {
+		userData = nil
+	} else {
+		userData = userDataObj
+	}
+
+	// Run genkey
+	genkeyMain := genkey.NewGenkeyMain(conn, userData)
+	userData = genkeyMain.GetUserData()
+
+	if userData.Interactive.InInteractive {
+		genkeyInteractive := genkey.NewGenkeyInteractive(conn, userData)
+		genkeyInteractive.InteractiveSubsequent(string(message))
+	} else {
+		genkeyMain.Run(string(message))
+	}
+
+	if userData.Interactive.InInteractive {
+		genkeyMain.SendMessage("[HOLD]")
+	} else {
+		genkeyMain.SendMessage("[DONE]")
+	}
+
+	// Store UserData to sync map
+	connUsersData.Add(connID, genkeyMain.GetUserData())
 }
 
 func generateConnID() uint32 {

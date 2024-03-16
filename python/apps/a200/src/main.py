@@ -89,9 +89,8 @@ def set_states(section: JSON, new_state: bool):
 
 
 def parse_command(args: list[str]) -> tuple[str | None, list[str]]:
-    _a200 = args[0]
-    action: str | None = args[1] if len(args) > 1 else None
-    action_args: list[str] = args[2:] if len(args) > 2 else []
+    action: str | None = args[0] if len(args) else None
+    action_args: list[str] = args[1:]
     return action, action_args
 
 
