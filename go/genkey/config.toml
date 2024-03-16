@@ -79,10 +79,10 @@ Onehand = 0
 # The characters that generated layouts will consist of.
 GeneratedLayoutChars = "abcdefghijklmnopqrstuvwxyz,./'"
 # The number of random layouts to be optimized at start of generation.
-InitialPopulation = 1000
+InitialPopulation = 500
 # The number of best layouts out of the initial population to run full
 # improvement on. Must be less than InitialPopulation.
-Selection = 100
+Selection = 50
 
 [CorpusProcessing]
 # Describes how to process new corpora with `genkey load`. Doesn't

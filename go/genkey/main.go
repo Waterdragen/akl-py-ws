@@ -274,7 +274,8 @@ func (self *GenkeyMain) runCommand(args []string) {
 		genkeyGenerate := NewGenkeyGenerate(self.conn, self.userData)
 		self.userData.ImproveFlag = true
 		self.userData.ImproveLayout = layout
-		best := genkeyGenerate.Populate(1000)
+		// best := genkeyGenerate.Populate(1000)
+		best := genkeyGenerate.Populate(500)
 		optimal := genkeyGenerate.Score(best)
 
 		self.SendMessage(

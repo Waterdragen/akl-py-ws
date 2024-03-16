@@ -48,7 +48,7 @@ def get_cmini_response(data: CminiData) -> str | None:
     elif command in UNAUTHORIZED:
         return 'Unauthorized'
     elif command in UNSUPPORTED:
-        return 'Unsupported'
+        return 'Unsupported command in demo mode'
     elif command in ["gh", "github"]:
         return "<https://github.com/Apsu/cmini>"
 

@@ -51,7 +51,6 @@ class CminiConsumer(BaseConsumer):
             session = self.get_session()
             user_data = CminiData(text_data, session)
             cmini_response = get_cmini_response(user_data)
-            print(cmini_response)
             assert cmini_response != ""
         except Exception as e:
             traceback.print_exc()
@@ -71,14 +70,8 @@ class A200Consumer(BaseConsumer):
     async def receive(self, text_data=None, bytes_data=None):
         commands = str.split(text_data, " ")
 
-        # Handle bash command before running
-        if not (text_data == "./a200" or str.startswith(text_data, "./a200 ")):
-            await self.send(text_data=f"-bash: {commands[0]}: command not found\n")
-            return
-
         try:
             a200_console_log = A200(self).main(commands)
-            print(a200_console_log)
             await self.send(text_data=a200_console_log)
         except Exception as e:
             traceback.print_exc()
