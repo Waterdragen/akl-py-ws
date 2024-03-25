@@ -5,3 +5,4 @@ humanize==4.9.0
 jellyfish==1.0.3
 requests==2.31.0
 channels==4.0.0
+more-itertools==10.1.0
